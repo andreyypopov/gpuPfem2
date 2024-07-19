@@ -50,32 +50,8 @@ __global__ void kAccountForBoundaryValues(int n, const DirichletNode* boundaryVa
     }
 }
 
-DirichletBCs::DirichletBCs(const Mesh2D &mesh)
+void DirichletBCs::setupDirichletBCs(const std::vector<DirichletNode> &hostBcs)
 {
-    setupDirichletBCs(mesh);
-}
-
-void DirichletBCs::setupDirichletBCs(const Mesh2D &mesh)
-{
-    std::vector<DirichletNode> hostBcs;
-
-    const auto &vertices = mesh.getHostVertices();
-
-    hostBcs.reserve(0.1 * vertices.size());
-
-    for(unsigned i = 0; i < vertices.size(); ++i){
-        const Point2 &node = vertices[i];
-
-        if(std::fabs(node.x - (-1.0)) < CONSTANTS::DOUBLE_MIN)
-            hostBcs.push_back({ i, -1.0 });
-        else if(std::fabs(node.x - 1.0) < CONSTANTS::DOUBLE_MIN)
-            hostBcs.push_back({ i, 1.0 });
-        else if (std::fabs(node.y) < CONSTANTS::DOUBLE_MIN)
-            hostBcs.push_back({ i, 0.0 });
-        else if(std::fabs(node.y - 1.0) < CONSTANTS::DOUBLE_MIN)
-            hostBcs.push_back({ i, 2.0 });
-    }
-
     DirichletValues.allocate(hostBcs.size());
     copy_h2d(hostBcs.data(), DirichletValues.data, hostBcs.size());
 

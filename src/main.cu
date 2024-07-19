@@ -9,12 +9,35 @@
 
 int main(int argc, char *argv[]){
 	Mesh2D mesh;
-    if(!mesh.loadMeshFromFile("TestProblem2.dat"))
+    if(!mesh.loadMeshFromFile("../data/TestProblem2.dat"))
         return EXIT_FAILURE;
 
     const int problemSize = mesh.getVertices().size;
 
-    DirichletBCs bcs(mesh);
+    DirichletBCs bcs;
+    
+    {
+        std::vector<DirichletNode> hostBcs;
+
+        const auto& vertices = mesh.getHostVertices();
+
+        hostBcs.reserve(0.1 * vertices.size());
+
+        for (unsigned i = 0; i < vertices.size(); ++i) {
+            const Point2& node = vertices[i];
+
+            if (std::fabs(node.x - (-1.0)) < CONSTANTS::DOUBLE_MIN)
+                hostBcs.push_back({ i, -1.0 });
+            else if (std::fabs(node.x - 1.0) < CONSTANTS::DOUBLE_MIN)
+                hostBcs.push_back({ i, 1.0 });
+            else if (std::fabs(node.y) < CONSTANTS::DOUBLE_MIN)
+                hostBcs.push_back({ i, 0.0 });
+            else if (std::fabs(node.y - 1.0) < CONSTANTS::DOUBLE_MIN)
+                hostBcs.push_back({ i, 2.0 });
+        }
+
+        bcs.setupDirichletBCs(hostBcs);
+    }
 
     SparseMatrixCSR matrix(mesh);
     NumericalIntegrator2D integrator(mesh, qf2D3);

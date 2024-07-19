@@ -14,9 +14,7 @@ struct DirichletNode
 class DirichletBCs
 {
 public:
-    explicit DirichletBCs(const Mesh2D &mesh);
-
-    virtual void setupDirichletBCs(const Mesh2D &mesh);
+    void setupDirichletBCs(const std::vector<DirichletNode> &hostBcs);
 
     void applyBCs(SparseMatrixCSR& matrix, deviceVector<double>& rhs);
 
