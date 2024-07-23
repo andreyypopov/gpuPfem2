@@ -79,7 +79,7 @@ __global__ void applyJacobiPreconditioner(int n, double *dest, const double *src
     dest[row] = src[row] * preconditioner[row];
 }
 
-SolverCG::SolverCG(double tolerance, int max_iterations)
+LinearSolver::LinearSolver(double tolerance, int max_iterations)
     : aSpmv(1.0)
     , bSpmv(0.0)
     , tolerance(tolerance)
@@ -90,14 +90,38 @@ SolverCG::SolverCG(double tolerance, int max_iterations)
     checkCusparseErrors(cusparseCreate(&cusparseHandle));
 }
 
-SolverCG::~SolverCG(){
+LinearSolver::~LinearSolver()
+{
     checkCublasErrors(cublasDestroy(cublasHandle));
     checkCusparseErrors(cusparseDestroySpMat(matA));
     checkCusparseErrors(cusparseDestroyDnVec(vecX));
     checkCusparseErrors(cusparseDestroyDnVec(vecY));
     checkCusparseErrors(cusparseDestroy(cusparseHandle));
     checkCudaErrors(cudaFree(dBuffer));
+}
 
+void LinearSolver::init(const SparseMatrixCSR& matrix, bool usePreconditioning) {
+    this->n = matrix.getRows();
+    this->nnz = matrix.getTotalElements();
+    this->usePreconditioning = usePreconditioning;
+
+    gpuBlocks = blocksForSize(n);
+
+    if(usePreconditioning)
+        invDiagValues.allocate(n);
+    
+    checkCusparseErrors(cusparseCreateCsr(&matA, n, n, nnz,
+        matrix.getRowOffset(), matrix.getColIndices(), matrix.getMatrixValues(),
+        CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
+        CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F));
+}
+
+SolverCG::SolverCG(double tolerance, int max_iterations)
+    : LinearSolver(tolerance, max_iterations)
+{
+}
+
+SolverCG::~SolverCG(){
     if (ChronopolousGear) {
         free_device(alpha_k);
         free_device(beta_k);
@@ -110,11 +134,7 @@ SolverCG::~SolverCG(){
 }
 
 void SolverCG::init(const SparseMatrixCSR &matrix, bool usePreconditioning){
-    this->n = matrix.getRows();
-    this->nnz = matrix.getTotalElements();
-    this->usePreconditioning = usePreconditioning;
-
-    gpuBlocks = blocksForSize(n);
+    LinearSolver::init(matrix, usePreconditioning);
 
     rk.allocate(n);
     if(usePreconditioning){
@@ -122,8 +142,6 @@ void SolverCG::init(const SparseMatrixCSR &matrix, bool usePreconditioning){
             uk.allocate(n);
         else
             zk.allocate(n);
-
-        invDiagValues.allocate(n);        
     }
     
     if (ChronopolousGear) {
@@ -144,13 +162,6 @@ void SolverCG::init(const SparseMatrixCSR &matrix, bool usePreconditioning){
     allocate_device(&gamma_kp, 1);
     allocate_device(&gamma_k, 1);
 
-    size_t bufferSize = 0;
-
-    checkCusparseErrors(cusparseCreateCsr(&matA, n, n, nnz,
-        matrix.getRowOffset(), matrix.getColIndices(), matrix.getMatrixValues(),
-        CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
-        CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F));
-    
     if (ChronopolousGear) {
         double *v = usePreconditioning ? uk.data : rk.data;
         checkCusparseErrors(cusparseCreateDnVec(&vecX, n, v, CUDA_R_64F));
@@ -160,6 +171,9 @@ void SolverCG::init(const SparseMatrixCSR &matrix, bool usePreconditioning){
         checkCusparseErrors(cusparseCreateDnVec(&vecX, n, pk.data, CUDA_R_64F));
         checkCusparseErrors(cusparseCreateDnVec(&vecY, n, Apk.data, CUDA_R_64F));
     }
+
+    size_t bufferSize = 0;
+
     checkCusparseErrors(cusparseSpMV_bufferSize(
         cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
         &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
