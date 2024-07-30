@@ -422,13 +422,18 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
     //x0 = 0
     zero_value_device(x.data, n);
 
-    //compute ||r0|| = ||b||, which becomes first element of the beta vector
-    checkCublasErrors(cublasDnrm2(cublasHandle, n, b.data, 1, beta.data));
-    
     v_kp = Vmatrix.data;
+    copy_d2d(b.data, v_kp, n);
 
-    //V1 = r0 / ||r0|| = b / ||b||
-    scaleVector<<<gpuBlocks, gpuThreads>>>(n, v_kp, b.data, beta.data, true);
+    //r0 := M^(-1) * r0
+    if(usePreconditioning)
+        applyJacobiPreconditioner<<<gpuBlocks, gpuThreads>>>(n, v_kp, v_kp, invDiagValues.data);
+
+    //compute ||r0||, which becomes first element of the beta vector
+    checkCublasErrors(cublasDnrm2(cublasHandle, n, v_kp, 1, beta.data));
+
+    //V1 = r0 / ||r0|| = b / ||b|| (or with preconditioner applied)
+    scaleVector<<<gpuBlocks, gpuThreads>>>(n, v_kp, v_kp, beta.data, true);
 
     int it = 0;
     while(it < maxIterations){
@@ -438,6 +443,7 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
         v_k = v_kp;
         v_kp = v_k + n;
 
+        //update the pointers to vectors used in SpMV
         checkCusparseErrors(cusparseDnVecSetValues(vecX, v_k));
         checkCusparseErrors(cusparseDnVecSetValues(vecY, v_kp));
 
@@ -445,6 +451,9 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
         checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                 &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
                 CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+
+        if(usePreconditioning)
+            applyJacobiPreconditioner<<<gpuBlocks, gpuThreads>>>(n, v_kp, v_kp, invDiagValues.data);
 
         //pointer to the first element in the column to be filled at this iteration
         double *h_1k = Hmatrix.data + maxIterations * (it - 1);

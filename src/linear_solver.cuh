@@ -105,11 +105,32 @@ public:
     bool solve(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b);
 
 private:
-    deviceVector<double> Hmatrix, Vmatrix;  //both matrices are stored in column-major format
-    deviceVector<double> cs, sn, beta, y;
+    /*!
+     * @brief Upper-triangular part of the Hessenberg matrix H
+     * 
+     * Elements below diagonal are not stored. At each iteration corresponding element is temporarily stored in aux
+     * and then zeroed using Givens rotation.
+     * 
+     * The matrix is stored in column-major format (columns are stored as rows) and additional columns are filled
+     * during the progress of the algorithm
+     */
+    deviceVector<double> Hmatrix;
+
+    /*!
+     * @brief Matrix of Krylov subspace vectors
+     * 
+     * The matrix is stored in column-major format (columns are stored as rows) and additional columns are filled
+     * during the progress of the algorithm
+     */
+    deviceVector<double> Vmatrix;
+    
+    deviceVector<double> cs;        //!< Vector of cosine values of the Givens rotations
+    deviceVector<double> sn;        //!< Vector of sine values of the Givens rotations
+    deviceVector<double> beta;      //!< Beta vector used in the linear least squares problem
+    deviceVector<double> y;         //!< Solution vector of the linear least squares problem (later used in the triangular solve)
 
     double *v_kp, *v_k;     //!< Variables used only as pointers to different locations in the V matrix (no additional allocation)
-    double *aux;
+    double *aux;            //!< Auxiliary variable for the Hessenberg matrix H
     double *d_abSpmv;       //!< Additional variable for coefficients in dense matrix-vector multiplication from Cublas
                             //!< (as the pointer mode for scalar values for Cublas is set to 'device') 
 };
