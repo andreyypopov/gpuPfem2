@@ -51,8 +51,6 @@ SparseMatrixCSR::SparseMatrixCSR(const Mesh2D &mesh)
     copy_h2d(hostRowOffset.data(), rowOffset.data, rows + 1);
     copy_h2d(hostColIndices.data(), colIndices.data, totalElements);
     zero_value_device(matrixValues.data, totalElements);
-
-    exportMatrixStructure("matrix.dat", hostRowOffset, hostColIndices);
 }
 
 bool SparseMatrixCSR::exportMatrix(const std::string& filename) const

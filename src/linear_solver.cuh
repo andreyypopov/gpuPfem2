@@ -88,4 +88,30 @@ private:
     const bool ChronopolousGear = false;
 };
 
+// CUDA implementation of the GMRES solver
+//
+// Implemented according to Saad Y. Iterative Methods for Sparse Linear Systems
+//
+// At this point no restart is performed
+//
+class SolverGMRES : public LinearSolver
+{
+public:
+    SolverGMRES(double tolerance, int max_iterations);
+    virtual ~SolverGMRES();
+
+    void init(const SparseMatrixCSR &matrix, bool usePreconditioning = false);
+
+    bool solve(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b);
+
+private:
+    deviceVector<double> Hmatrix, Vmatrix;  //both matrices are stored in column-major format
+    deviceVector<double> cs, sn, beta, y;
+
+    double *v_kp, *v_k;     //!< Variables used only as pointers to different locations in the V matrix (no additional allocation)
+    double *aux;
+    double *d_abSpmv;       //!< Additional variable for coefficients in dense matrix-vector multiplication from Cublas
+                            //!< (as the pointer mode for scalar values for Cublas is set to 'device') 
+};
+
 #endif // linear_solver_cuh

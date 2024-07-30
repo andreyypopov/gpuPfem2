@@ -78,6 +78,16 @@ __host__ __device__ inline double norm1(const Point2 &v){
     return fabs(v.x) + fabs(v.y);
 }
 
+__host__ __device__ inline Point2 GivensRotation(const double &v1, const double &v2){
+    const double coeff = rsqrt(v1 * v1 + v2 * v2);
+
+    Point2 res;
+    res.x = v1 * coeff;
+    res.y = v2 * coeff;
+
+    return res;
+}
+
 class SymmetricMatrix3x3
 {
 public:

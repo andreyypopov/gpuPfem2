@@ -49,6 +49,8 @@ int main(int argc, char *argv[]){
     integrator.assembleSystem(matrix, rhsVector);
     bcs.applyBCs(matrix, rhsVector);
 
+    matrix.exportMatrix("matrix.dat");
+
     deviceVector<double> solution;
     solution.allocate(problemSize);
 
@@ -56,7 +58,10 @@ int main(int argc, char *argv[]){
     cgSolver.init(matrix, true);
     cgSolver.solve(matrix, solution, rhsVector);
 
-    matrix.exportMatrix("matrix.dat");
+    SolverGMRES gmresSolver(1e-8, 1000);
+    gmresSolver.init(matrix, true);
+    gmresSolver.solve(matrix, solution, rhsVector);
+
     solution.exportToFile("solution.dat");
     rhsVector.exportToFile("rhs.dat");
 
