@@ -170,8 +170,6 @@ void LinearSolver::init(const SparseMatrixCSR& matrix, bool usePreconditioning) 
         matrix.getRowOffset(), matrix.getColIndices(), matrix.getMatrixValues(),
         CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
         CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F));
-
-    //add call to cusparseSpMV_preprocess
 }
 
 SolverCG::SolverCG(double tolerance, int max_iterations)
@@ -237,6 +235,11 @@ void SolverCG::init(const SparseMatrixCSR &matrix, bool usePreconditioning){
         &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
         CUSPARSE_SPMV_CSR_ALG1, &bufferSize));
     checkCudaErrors(cudaMalloc(&dBuffer, bufferSize));
+
+    checkCusparseErrors(cusparseSpMV_preprocess(
+        cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+        &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
+        CUSPARSE_SPMV_CSR_ALG1, dBuffer));
 }
 
 bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b)
@@ -410,6 +413,11 @@ void SolverGMRES::init(const SparseMatrixCSR &matrix, bool usePreconditioning)
         &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
         CUSPARSE_SPMV_CSR_ALG1, &bufferSize));
     checkCudaErrors(cudaMalloc(&dBuffer, bufferSize));
+
+    checkCusparseErrors(cusparseSpMV_preprocess(
+        cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+        &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
+        CUSPARSE_SPMV_CSR_ALG1, dBuffer));
 }
 
 bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b)

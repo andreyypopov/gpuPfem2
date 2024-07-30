@@ -5,17 +5,27 @@
 #include "numerical_integrator_2d.cuh"
 #include "sparse_matrix.cuh"
 
+#include "common/gpu_timer.cuh"
+
 #include <vector>
 
 int main(int argc, char *argv[]){
-	Mesh2D mesh;
+	GpuTimer timer;
+    
+    timer.start();
+
+    Mesh2D mesh;
     if(!mesh.loadMeshFromFile("../data/TestProblem2.dat"))
         return EXIT_FAILURE;
+
+    timer.stop("Mesh import");
 
     const int problemSize = mesh.getVertices().size;
 
     DirichletBCs bcs;
     
+    timer.start();
+
     {
         std::vector<DirichletNode> hostBcs;
 
@@ -39,6 +49,8 @@ int main(int argc, char *argv[]){
         bcs.setupDirichletBCs(hostBcs);
     }
 
+    timer.stop("Boundary conditions setup");
+
     SparseMatrixCSR matrix(mesh);
     NumericalIntegrator2D integrator(mesh, qf2D3);
 
@@ -46,21 +58,32 @@ int main(int argc, char *argv[]){
     rhsVector.allocate(problemSize);
     zero_value_device(rhsVector.data, problemSize);
 
+    timer.start();
+
     integrator.assembleSystem(matrix, rhsVector);
     bcs.applyBCs(matrix, rhsVector);
+
+    timer.stop("Assembly of system and rhs");
 
     matrix.exportMatrix("matrix.dat");
 
     deviceVector<double> solution;
     solution.allocate(problemSize);
 
+    timer.start();
+
     SolverCG cgSolver(1e-8, 1000);
     cgSolver.init(matrix, true);
     cgSolver.solve(matrix, solution, rhsVector);
 
+    timer.stop("PCG solver");
+    timer.start();
+
     SolverGMRES gmresSolver(1e-8, 1000);
     gmresSolver.init(matrix, true);
     gmresSolver.solve(matrix, solution, rhsVector);
+
+    timer.stop("GMRES solver");
 
     solution.exportToFile("solution.dat");
     rhsVector.exportToFile("rhs.dat");
