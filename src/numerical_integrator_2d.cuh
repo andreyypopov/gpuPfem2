@@ -13,23 +13,14 @@ public:
 
     virtual ~NumericalIntegrator2D();
 
-	int getGaussPointsNumber() const {
-		return GaussPointsNum;
-	}
-
-    int getQuadratureFormulaOrder() const {
-        return qf.order;
-    }
-
     void assembleSystem(SparseMatrixCSR &csrMatrix, deviceVector<double> &rhsVector);
 
-private:
-    const int GaussPointsNum;                           //!< Number of Gaussian points in the quadrature formula
+protected:
+    const Mesh2D &mesh;
 
     deviceVector<double> cellArea;
     deviceVector<Matrix2x2> invJacobi;
 
-    const Mesh2D &mesh;
     const QuadratureFormula2D &qf;
 };
 

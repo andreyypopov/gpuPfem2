@@ -17,6 +17,7 @@ SET(src_files
 	${PROJECT_SOURCE_PATH}/main.cu
 	${PROJECT_SOURCE_PATH}/mesh_2d.cu
 	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cu
+	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cu
 	${PROJECT_SOURCE_PATH}/sparse_matrix.cu
 	)
 SET(src_common_files

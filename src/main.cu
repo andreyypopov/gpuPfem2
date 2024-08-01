@@ -51,8 +51,10 @@ int main(int argc, char *argv[]){
 
     timer.stop("Boundary conditions setup");
 
+    QuadratureFormula2D qf(1);
+
     SparseMatrixCSR matrix(mesh);
-    NumericalIntegrator2D integrator(mesh, qf2D3);
+    NumericalIntegrator2D integrator(mesh, qf);
 
     deviceVector<double> rhsVector;
     rhsVector.allocate(problemSize);
