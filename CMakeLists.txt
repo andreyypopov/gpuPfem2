@@ -20,6 +20,7 @@ SET(src_files
 	${PROJECT_SOURCE_PATH}/linear_solver.cu
 	${PROJECT_SOURCE_PATH}/mesh_2d.cu
 	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cu
+	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cu
 	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cu
 	${PROJECT_SOURCE_PATH}/sparse_matrix.cu
 	)
@@ -34,6 +35,7 @@ SET(header_files
 	${PROJECT_SOURCE_PATH}/mesh_2d.cuh
 	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cuh
 	${PROJECT_SOURCE_PATH}/sparse_matrix.cuh
+	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cuh
 	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cuh
 	)
 SET(header_common_files

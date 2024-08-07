@@ -4,6 +4,7 @@
 #include "common/constants.h"
 #include "mesh_2d.cuh"
 #include "sparse_matrix.cuh"
+#include "quadrature_formula_1d.cuh"
 #include "quadrature_formula_2d.cuh"
 
 __device__ inline Point2 shapeFuncGrad(int i) {
@@ -46,7 +47,7 @@ __device__ inline void addLocalToGlobal(const uint3& triangle, const double area
 class NumericalIntegrator2D
 {
 public:
-    NumericalIntegrator2D(const Mesh2D &mesh_, const QuadratureFormula2D &qf_);
+    NumericalIntegrator2D(const Mesh2D &mesh_, const QuadratureFormula2D &qf_, const QuadratureFormula1D &edgeQf_);
 
     virtual ~NumericalIntegrator2D();
 
@@ -57,6 +58,7 @@ protected:
     deviceVector<Matrix2x2> invJacobi;
 
     const QuadratureFormula2D &qf;
+    const QuadratureFormula1D &edgeQf;
 };
 
 #endif // NUMERICAL_INTEGRATOR_3D_CUH

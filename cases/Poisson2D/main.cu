@@ -16,7 +16,7 @@ __device__ double rhsFunction(const Point2& pt) {
 
 __global__ void kIntegrateOverCell(int n, const Point2 *vertices, const uint3 *cells, double *areas, Matrix2x2 *invJacobi,
     const int *rowOffset, const int *colIndices, double *matrixValues, double *rhsVector,
-    const Point3 *qf_coordinates, const double *qf_weights, int qf_points_num)
+    const GaussPoint2D *qf_points, int qf_points_num)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -38,19 +38,17 @@ __global__ void kIntegrateOverCell(int n, const Point2 *vertices, const uint3 *c
         double aux;
 
         for(int k = 0; k < qf_points_num; ++k){
-            Point2 quadraturePoint = { 0.0, 0.0 };
-            const Point3 Lcoordinates = qf_coordinates[k];
-            for (int l = 0; l < 3; ++l)
-                quadraturePoint += *(&Lcoordinates.x + l) * triangleVertices[l];
+            const Point3 Lcoordinates = qf_points[k].coordinates;
+            Point2 quadraturePoint = faceQuadraturePoint(Lcoordinates, triangleVertices);
 
             for(int i = 0; i < 3; ++i){
                 for(int j = i; j < 3; ++j){
-                    aux = lambda * dot(cellInvJacobi * shapeFuncGrad(i), cellInvJacobi * shapeFuncGrad(j)) * qf_weights[k];
+                    aux = lambda * dot(cellInvJacobi * shapeFuncGrad(i), cellInvJacobi * shapeFuncGrad(j)) * qf_points[k].weight;
 
                     localMatrix(i, j) += aux;
                 }
 
-                aux = rhsFunction(quadraturePoint) * *(&Lcoordinates.x + i) * qf_weights[k];
+                aux = rhsFunction(quadraturePoint) * *(&Lcoordinates.x + i) * qf_points[k].weight;
                 localRhs[i] += aux;
             }
         }
@@ -62,8 +60,8 @@ __global__ void kIntegrateOverCell(int n, const Point2 *vertices, const uint3 *c
 class PoissonIntegrator : public NumericalIntegrator2D
 {
 public:
-    PoissonIntegrator(const Mesh2D& mesh_, const QuadratureFormula2D& qf_)
-        : NumericalIntegrator2D(mesh_, qf_) { };
+    PoissonIntegrator(const Mesh2D& mesh_, const QuadratureFormula2D& qf_, const QuadratureFormula1D& edgeQf_)
+        : NumericalIntegrator2D(mesh_, qf_, edgeQf_) { };
 
 	void assembleSystem(SparseMatrixCSR &csrMatrix, deviceVector<double> &rhsVector);
 };
@@ -74,7 +72,7 @@ void PoissonIntegrator::assembleSystem(SparseMatrixCSR &csrMatrix, deviceVector<
 
     kIntegrateOverCell<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, cellArea.data, invJacobi.data,
         csrMatrix.getRowOffset(), csrMatrix.getColIndices(), csrMatrix.getMatrixValues(), rhsVector.data,
-        qf.getCoordinates(), qf.getWeights(), qf.getGaussPointsNumber());
+        qf.getGaussPoints(), qf.getGaussPointsNumber());
 }
 
 int main(int argc, char *argv[]){
@@ -120,9 +118,10 @@ int main(int argc, char *argv[]){
     timer.stop("Boundary conditions setup");
 
     QuadratureFormula2D qf(1);
+    QuadratureFormula1D edgeQf(1);
 
     SparseMatrixCSR matrix(mesh);
-    PoissonIntegrator integrator(mesh, qf);
+    PoissonIntegrator integrator(mesh, qf, edgeQf);
 
     deviceVector<double> rhsVector;
     rhsVector.allocate(problemSize);

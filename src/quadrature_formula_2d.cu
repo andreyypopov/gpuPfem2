@@ -1,20 +1,22 @@
 #include "quadrature_formula_2d.cuh"
 
 QuadratureFormula2D::QuadratureFormula2D(int index){
-    std::vector<Point2> quadraturePoints;
+    std::vector<GaussPoint2D> GaussPoints;
+    
+    std::vector<Point2> coordinates;
     std::vector<double> weights;
 
     switch (index)
     {
     case 0:	//Quadrature formula with 1 Gauss point (2nd order)
-        quadraturePoints = {
+        coordinates = {
             { 0.3333333333333333, 0.3333333333333333 }
         };
         weights = {	1.0};
         order = 2;
         break;
     case 1: //Quadrature formula with 3 Gauss points (2nd order)
-        quadraturePoints = {
+        coordinates = {
             { 0.1666666666666667, 0.1666666666666667 },
             { 0.6666666666666667, 0.1666666666666667 },
             { 0.1666666666666667, 0.6666666666666667 }
@@ -23,7 +25,7 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         order = 2;
         break;
     case 2: //Quadrature formula with 4 Gauss points (3rd order)
-        quadraturePoints = {
+        coordinates = {
             { 0.3333333333333333, 0.3333333333333333 },
             { 0.6, 0.2 },
             { 0.2, 0.6 },
@@ -33,7 +35,7 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         order = 3;
         break;
     case 3: //Quadrature formula with 6 Gauss points (4th order)
-        quadraturePoints = {
+        coordinates = {
             { 0.816847572980459, 0.091576213509771 },
             { 0.091576213509771, 0.816847572980459 },
             { 0.091576213509771, 0.091576213509771 },
@@ -46,7 +48,7 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         order = 4;
         break;
     case 4: //Quadrature formula with 7 Gauss points (5th order)
-        quadraturePoints = {
+        coordinates = {
             { 0.3333333333333333, 0.3333333333333333 },
             { 0.101286507323456, 0.797426985353087 },
             { 0.797426985353087, 0.101286507323456 },
@@ -60,7 +62,7 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         order =	5;
         break;
     case 5: //Quadrature formula with 9 Gauss points (5th order)
-        quadraturePoints = {
+        coordinates = {
             { 0.437525248383384, 0.124949503233232 },
             { 0.124949503233232, 0.437525248383384 },
             { 0.437525248383384, 0.437525248383384 },
@@ -76,7 +78,7 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         order =	5;
         break;
     case 6: //Quadrature formula with 12 Gauss points (6th order)
-        quadraturePoints = {
+        coordinates = {
             { 0.873821971016996, 0.063089014491502 },
             { 0.063089014491502, 0.873821971016996 },
             { 0.063089014491502, 0.063089014491502 },
@@ -95,7 +97,7 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         order =	6;
         break;
     case 7: //Quadrature formula with 13 Gauss points (7th order), contains 1 point with negative weight
-        quadraturePoints = {
+        coordinates = {
             { 0.333333333333333, 0.333333333333333 },
             { 0.479308067841923, 0.260345966079038 },
             { 0.260345966079038, 0.479308067841923 },
@@ -118,20 +120,16 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         break;
     }
 
-    std::vector<Point3> Lcoordinates;
-    Lcoordinates.reserve(quadraturePoints.size());
-    for(const Point2 &pt2 : quadraturePoints){
-        Point3 pt3;
-        pt3.x = pt2.x;
-        pt3.y = pt2.y;
-        pt3.z = 1.0 - pt2.x - pt2.y;
-
-        Lcoordinates.push_back(pt3);
+    GaussPoints.reserve(coordinates.size());
+    for(int i = 0; i < coordinates.size(); ++i){
+        GaussPoint2D gp;
+        gp.coordinates.x = coordinates[i].x;
+        gp.coordinates.y = coordinates[i].y;
+        gp.coordinates.z = 1.0 - coordinates[i].x - coordinates[i].y;
+        gp.weight = weights[i];
+        GaussPoints.push_back(gp);
     }
 
-    d_coordinates.allocate(Lcoordinates.size());
-    copy_h2d(Lcoordinates.data(), d_coordinates.data, Lcoordinates.size());
-
-    d_weights.allocate(weights.size());
-    copy_h2d(weights.data(), d_weights.data, weights.size());
+    d_GaussPoints.allocate(GaussPoints.size());
+    copy_h2d(GaussPoints.data(), d_GaussPoints.data, GaussPoints.size());
 }
