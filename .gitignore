@@ -1,0 +1,15 @@
+# build and install files
+build
+install
+
+# IDE
+.vscode
+
+# artefacts
+*.ods
+
+# cmake files
+CMakeFiles
+CMakeCache.txt
+Makefile
+cmake_install.cmake
