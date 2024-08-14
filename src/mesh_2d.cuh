@@ -21,6 +21,10 @@ public:
         return cells;
     }
 
+    const auto &getEdgeBoundaryIDs() const {
+        return edgeBoundaryIDs;
+    }
+
     const auto &getHostVertices() const {
         return hostVertices;
     }
@@ -32,6 +36,7 @@ public:
 private:
     deviceVector<Point2> vertices;               //!< Vector of vertices coordinates
     deviceVector<uint3> cells;                   //!< Vector of indices of vertices describing each cell
+    deviceVector<int3> edgeBoundaryIDs;          //!< Vector of boundary IDs for edges of each triangle
 
     std::vector<Point2> hostVertices;
     std::vector<uint3> hostCells;

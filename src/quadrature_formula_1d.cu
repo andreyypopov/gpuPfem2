@@ -1,6 +1,6 @@
 #include "quadrature_formula_1d.cuh"
 
-QuadratureFormula1D::QuadratureFormula1D(int index){
+std::vector<GaussPoint1D> createEdgeQuadratureFormula(int index){
     std::vector<GaussPoint1D> GaussPoints;
 
     std::vector<double> coordinates;
@@ -40,6 +40,5 @@ QuadratureFormula1D::QuadratureFormula1D(int index){
         GaussPoints.push_back(gp);
     }
 
-    d_GaussPoints.allocate(GaussPoints.size());
-    copy_h2d(GaussPoints.data(), d_GaussPoints.data, GaussPoints.size());
+    return GaussPoints;
 }

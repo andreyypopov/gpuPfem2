@@ -3,6 +3,7 @@ build
 install
 
 # IDE
+.vs
 .vscode
 
 # artefacts

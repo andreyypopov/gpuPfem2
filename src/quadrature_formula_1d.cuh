@@ -17,21 +17,6 @@ struct GaussPoint1D {
 	double weight;
 };
 
-class QuadratureFormula1D
-{
-public:
-	explicit QuadratureFormula1D(int index);
-
-	const GaussPoint1D *getGaussPoints() const {
-		return d_GaussPoints.data;
-	}
-
-	int getGaussPointsNumber() const {
-		return d_GaussPoints.size;
-	}
-
-private:
-	deviceVector<GaussPoint1D> d_GaussPoints;	//!< Gauss points
-};
+std::vector<GaussPoint1D> createEdgeQuadratureFormula(int index);
 
 #endif // QUADRATURE_FORMULA_1D_CUH

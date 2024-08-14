@@ -30,10 +30,8 @@ __global__ void kCalculateInvJacobi(int n, const Point2 *vertices, const uint3 *
     }
 }
 
-NumericalIntegrator2D::NumericalIntegrator2D(const Mesh2D &mesh_, const QuadratureFormula2D &qf_, const QuadratureFormula1D &edgeQf_)
+NumericalIntegrator2D::NumericalIntegrator2D(const Mesh2D &mesh_)
     : mesh(mesh_)
-    , qf(qf_)
-    , edgeQf(edgeQf_)
 {
     cellArea.allocate(mesh.getCells().size);
     invJacobi.allocate(mesh.getCells().size);

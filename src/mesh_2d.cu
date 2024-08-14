@@ -48,9 +48,11 @@ bool Mesh2D::loadMeshFromFile(const std::string &filename, double scale)
 
         vertices.allocate(numVertices);
         cells.allocate(numCells);
+        edgeBoundaryIDs.allocate(numCells);
 
         copy_h2d(hostVertices.data(), vertices.data, vertices.size);
         copy_h2d(hostCells.data(), cells.data, cells.size);
+        set_value_device(edgeBoundaryIDs.data, -1, cells.size);
 
         printf("Loaded mesh with %d vertices and %d cells\n", numVertices, numCells);
 

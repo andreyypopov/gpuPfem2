@@ -1,6 +1,6 @@
 #include "quadrature_formula_2d.cuh"
 
-QuadratureFormula2D::QuadratureFormula2D(int index){
+std::vector<GaussPoint2D> createFaceQuadratureFormula(int index){
     std::vector<GaussPoint2D> GaussPoints;
     
     std::vector<Point2> coordinates;
@@ -13,7 +13,6 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
             { 0.3333333333333333, 0.3333333333333333 }
         };
         weights = {	1.0};
-        order = 2;
         break;
     case 1: //Quadrature formula with 3 Gauss points (2nd order)
         coordinates = {
@@ -22,7 +21,6 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
             { 0.1666666666666667, 0.6666666666666667 }
         };
         weights = { 0.3333333333333333, 0.3333333333333333, 0.3333333333333333 };
-        order = 2;
         break;
     case 2: //Quadrature formula with 4 Gauss points (3rd order)
         coordinates = {
@@ -32,7 +30,6 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
             { 0.2, 0.2 }
         };
         weights = { -0.5625, 0.5208333333333333, 0.5208333333333333, 0.5208333333333333 };
-        order = 3;
         break;
     case 3: //Quadrature formula with 6 Gauss points (4th order)
         coordinates = {
@@ -45,7 +42,6 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         };
         weights = { 0.109951743655322, 0.109951743655322, 0.109951743655322,
             0.223381589678011, 0.223381589678011, 0.223381589678011	};
-        order = 4;
         break;
     case 4: //Quadrature formula with 7 Gauss points (5th order)
         coordinates = {
@@ -59,7 +55,6 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         };
         weights = { 0.225, 0.125939180544827, 0.125939180544827, 0.125939180544827,
             0.132394152788506, 0.132394152788506, 0.132394152788506 };
-        order =	5;
         break;
     case 5: //Quadrature formula with 9 Gauss points (5th order)
         coordinates = {
@@ -75,7 +70,6 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         };
         weights = { 0.205950504760887, 0.205950504760887, 0.205950504760887, 0.063691414286223,
             0.063691414286223, 0.063691414286223, 0.063691414286223, 0.063691414286223, 0.063691414286223 };
-        order =	5;
         break;
     case 6: //Quadrature formula with 12 Gauss points (6th order)
         coordinates = {
@@ -94,7 +88,6 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         };
         weights = { 0.050844906370207, 0.050844906370207, 0.050844906370207, 0.116786275726379, 0.116786275726379, 0.116786275726379,
             0.082851075618374, 0.082851075618374, 0.082851075618374, 0.082851075618374, 0.082851075618374, 0.082851075618374 };
-        order =	6;
         break;
     case 7: //Quadrature formula with 13 Gauss points (7th order), contains 1 point with negative weight
         coordinates = {
@@ -114,7 +107,6 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         }; 
         weights = { -0.149570044467670, 0.175615257433204, 0.175615257433204, 0.175615257433204, 0.053347235608839, 0.053347235608839,
             0.053347235608839, 0.077113760890257, 0.077113760890257, 0.077113760890257, 0.077113760890257, 0.077113760890257, 0.077113760890257 };
-        order =	7;
         break;
     default:
         break;
@@ -130,6 +122,5 @@ QuadratureFormula2D::QuadratureFormula2D(int index){
         GaussPoints.push_back(gp);
     }
 
-    d_GaussPoints.allocate(GaussPoints.size());
-    copy_h2d(GaussPoints.data(), d_GaussPoints.data, GaussPoints.size());
+    return GaussPoints;
 }

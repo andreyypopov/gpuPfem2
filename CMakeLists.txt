@@ -34,9 +34,10 @@ SET(header_files
 	${PROJECT_SOURCE_PATH}/linear_solver.cuh
 	${PROJECT_SOURCE_PATH}/mesh_2d.cuh
 	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cuh
-	${PROJECT_SOURCE_PATH}/sparse_matrix.cuh
+	${PROJECT_SOURCE_PATH}/parameters.cuh
 	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cuh
 	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cuh
+	${PROJECT_SOURCE_PATH}/sparse_matrix.cuh
 	)
 SET(header_common_files
 	${PROJECT_SOURCE_PATH}/common/constants.h

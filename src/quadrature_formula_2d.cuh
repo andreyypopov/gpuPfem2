@@ -16,23 +16,6 @@ struct GaussPoint2D {
 	double weight;
 };
 
-class QuadratureFormula2D
-{
-public:
-	explicit QuadratureFormula2D(int index);
-
-	const GaussPoint2D *getGaussPoints() const {
-		return d_GaussPoints.data;
-	}
-
-	int getGaussPointsNumber() const {
-		return d_GaussPoints.size;
-	}
-
-private:
-	deviceVector<GaussPoint2D> d_GaussPoints;			//!< Gauss points
-
-    int order;							//!< Order of the quadrature formula
-};
+std::vector<GaussPoint2D> createFaceQuadratureFormula(int index);
 
 #endif // QUADRATURE_FORMULA_2D_CUH

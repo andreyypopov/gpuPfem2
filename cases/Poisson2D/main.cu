@@ -4,19 +4,25 @@
 #include "mesh_2d.cuh"
 #include "numerical_integrator_2d.cuh"
 #include "sparse_matrix.cuh"
+#include "quadrature_formula_1d.cuh"
+#include "quadrature_formula_2d.cuh"
 
 #include "common/cuda_math.cuh"
 #include "common/gpu_timer.cuh"
 
 #include <vector>
 
+__constant__ GaussPoint2D faceQuadratureFormula[CONSTANTS::MAX_GAUSS_POINTS];
+__constant__ int faceQuadraturePointsNum;
+__constant__ GaussPoint1D edgeQuadratureFormula[CONSTANTS::MAX_GAUSS_POINTS];
+__constant__ int edgeQuadraturePointsNum;
+
 __device__ double rhsFunction(const Point2& pt) {
     return exp(-(pt.x * pt.x + 10 * pt.y * pt.y));
 }
 
 __global__ void kIntegrateOverCell(int n, const Point2 *vertices, const uint3 *cells, double *areas, Matrix2x2 *invJacobi,
-    const int *rowOffset, const int *colIndices, double *matrixValues, double *rhsVector,
-    const GaussPoint2D *qf_points, int qf_points_num)
+    const int *rowOffset, const int *colIndices, double *matrixValues, double *rhsVector)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -37,18 +43,18 @@ __global__ void kIntegrateOverCell(int n, const Point2 *vertices, const uint3 *c
         double localRhs[3] = { 0.0, 0.0, 0.0 };
         double aux;
 
-        for(int k = 0; k < qf_points_num; ++k){
-            const Point3 Lcoordinates = qf_points[k].coordinates;
+        for(int k = 0; k < faceQuadraturePointsNum; ++k){
+            const Point3 Lcoordinates = faceQuadratureFormula[k].coordinates;
             Point2 quadraturePoint = faceQuadraturePoint(Lcoordinates, triangleVertices);
 
             for(int i = 0; i < 3; ++i){
                 for(int j = i; j < 3; ++j){
-                    aux = lambda * dot(cellInvJacobi * shapeFuncGrad(i), cellInvJacobi * shapeFuncGrad(j)) * qf_points[k].weight;
+                    aux = lambda * dot(cellInvJacobi * shapeFuncGrad(i), cellInvJacobi * shapeFuncGrad(j)) * faceQuadratureFormula[k].weight;
 
                     localMatrix(i, j) += aux;
                 }
 
-                aux = rhsFunction(quadraturePoint) * *(&Lcoordinates.x + i) * qf_points[k].weight;
+                aux = rhsFunction(quadraturePoint) * *(&Lcoordinates.x + i) * faceQuadratureFormula[k].weight;
                 localRhs[i] += aux;
             }
         }
@@ -60,8 +66,8 @@ __global__ void kIntegrateOverCell(int n, const Point2 *vertices, const uint3 *c
 class PoissonIntegrator : public NumericalIntegrator2D
 {
 public:
-    PoissonIntegrator(const Mesh2D& mesh_, const QuadratureFormula2D& qf_, const QuadratureFormula1D& edgeQf_)
-        : NumericalIntegrator2D(mesh_, qf_, edgeQf_) { };
+    PoissonIntegrator(const Mesh2D& mesh_)
+        : NumericalIntegrator2D(mesh_) { };
 
 	void assembleSystem(SparseMatrixCSR &csrMatrix, deviceVector<double> &rhsVector);
 };
@@ -71,8 +77,7 @@ void PoissonIntegrator::assembleSystem(SparseMatrixCSR &csrMatrix, deviceVector<
     unsigned int blocks = blocksForSize(mesh.getCells().size);
 
     kIntegrateOverCell<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, cellArea.data, invJacobi.data,
-        csrMatrix.getRowOffset(), csrMatrix.getColIndices(), csrMatrix.getMatrixValues(), rhsVector.data,
-        qf.getGaussPoints(), qf.getGaussPointsNumber());
+        csrMatrix.getRowOffset(), csrMatrix.getColIndices(), csrMatrix.getMatrixValues(), rhsVector.data);
 }
 
 int main(int argc, char *argv[]){
@@ -117,11 +122,17 @@ int main(int argc, char *argv[]){
 
     timer.stop("Boundary conditions setup");
 
-    QuadratureFormula2D qf(1);
-    QuadratureFormula1D edgeQf(1);
+    const auto faceQuadratureGaussPoints = createFaceQuadratureFormula(1);
+    const auto edgeQuadratureGaussPoints = createEdgeQuadratureFormula(1);
+    const int faceGaussPointsNum = faceQuadratureGaussPoints.size();
+    const int edgeGaussPointsNum = edgeQuadratureGaussPoints.size();
+    copy_h2const(faceQuadratureGaussPoints.data(), faceQuadratureFormula, faceGaussPointsNum);
+    copy_h2const(&faceGaussPointsNum, &faceQuadraturePointsNum, 1);
+    copy_h2const(edgeQuadratureGaussPoints.data(), edgeQuadratureFormula, edgeGaussPointsNum);
+    copy_h2const(&edgeGaussPointsNum, &edgeQuadraturePointsNum, 1);
 
     SparseMatrixCSR matrix(mesh);
-    PoissonIntegrator integrator(mesh, qf, edgeQf);
+    PoissonIntegrator integrator(mesh);
 
     deviceVector<double> rhsVector;
     rhsVector.allocate(problemSize);
