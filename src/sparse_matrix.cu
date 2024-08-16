@@ -5,7 +5,7 @@
 #include <set>
 #include <vector>
 
-SparseMatrixCSR::SparseMatrixCSR(const Mesh2D &mesh)
+void SparseMatrixCSR::initialize(const Mesh2D &mesh)
 {
     rows = mesh.getHostVertices().size();
     const int nCells = mesh.getHostCells().size();

@@ -7,7 +7,12 @@
 class SparseMatrixCSR
 {
 public:
-    explicit SparseMatrixCSR(const Mesh2D &mesh);
+    SparseMatrixCSR() = default;
+    explicit SparseMatrixCSR(const Mesh2D &mesh){
+        initialize(mesh);
+    };
+
+    void initialize(const Mesh2D &mesh);
 
     int* getRowOffset() const {
         return rowOffset.data;

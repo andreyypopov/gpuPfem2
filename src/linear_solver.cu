@@ -170,6 +170,21 @@ void LinearSolver::init(const SparseMatrixCSR& matrix, bool usePreconditioning) 
         matrix.getRowOffset(), matrix.getColIndices(), matrix.getMatrixValues(),
         CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
         CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F));
+
+    csrMatrix = &matrix;
+}
+
+bool LinearSolver::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b)
+{
+    if(csrMatrix != &A){
+        csrMatrix = &A;
+        checkCusparseErrors(cusparseCsrSetPointers(matA, A.getRowOffset(), A.getColIndices(), A.getMatrixValues()));
+    }
+
+    if(usePreconditioning)
+        extractDiagonal<<<gpuBlocks, gpuThreads>>>(n, invDiagValues.data, A.getRowOffset(), A.getColIndices(), A.getMatrixValues());
+
+    return true;
 }
 
 SolverCG::SolverCG(double tolerance, int max_iterations)
@@ -313,8 +328,7 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
 bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b){
     bool converged = false;
 
-    if(usePreconditioning)
-        extractDiagonal<<<gpuBlocks, gpuThreads>>>(n, invDiagValues.data, A.getRowOffset(), A.getColIndices(), A.getMatrixValues());
+    LinearSolver::solve(A, x, b);
 
     //x0 = 0
     zero_value_device(x.data, n);
@@ -424,9 +438,8 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
 {
     bool converged = false;
 
-    if(usePreconditioning)
-        extractDiagonal<<<gpuBlocks, gpuThreads>>>(n, invDiagValues.data, A.getRowOffset(), A.getColIndices(), A.getMatrixValues());
-
+    LinearSolver::solve(A, x, b);
+    
     //x0 = 0
     zero_value_device(x.data, n);
 

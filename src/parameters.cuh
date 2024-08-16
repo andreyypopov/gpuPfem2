@@ -14,7 +14,7 @@ struct SimulationParameters
     double tolerance;               //!< Linear solver tolerance
     int maxIterations;              //!< Maximum number of iterations of the linear solver
 
-    char* meshFileName;             //!< File name of the input mesh file
+    const char* meshFileName;             //!< File name of the input mesh file
     int outputFrequency;            //!< Output data each N frames
 
     void setDefaultParameters(){

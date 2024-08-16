@@ -4,6 +4,7 @@
 #include "mesh_2d.cuh"
 
 #include <map>
+#include <vector>
 
 class DataExport
 {
@@ -18,6 +19,7 @@ private:
     const Mesh2D &mesh;
 
     std::map<std::string, double*> scalarDataVectors;
+    std::map<std::string, std::vector<double>> hostScalarDataVectors;
 };
 
 #endif // DATA_EXPORT_H
