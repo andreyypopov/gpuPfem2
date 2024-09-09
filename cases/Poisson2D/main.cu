@@ -40,12 +40,12 @@ __global__ void kIntegrateOverCell(int n, const Point2 *vertices, const uint3 *c
         Matrix2x2 cellInvJacobi = invJacobi[idx];
 
         SymmetricMatrix3x3 localMatrix;
-        double localRhs[3] = { 0.0, 0.0, 0.0 };
+        Vector3 localRhs;
         double aux;
 
         for(int k = 0; k < faceQuadraturePointsNum; ++k){
             const Point3 Lcoordinates = faceQuadratureFormula[k].coordinates;
-            Point2 quadraturePoint = faceQuadraturePoint(Lcoordinates, triangleVertices);
+            Point2 quadraturePoint = transformLocalToGlobal(Lcoordinates, triangleVertices);
 
             for(int i = 0; i < 3; ++i){
                 for(int j = i; j < 3; ++j){
@@ -55,7 +55,7 @@ __global__ void kIntegrateOverCell(int n, const Point2 *vertices, const uint3 *c
                 }
 
                 aux = rhsFunction(quadraturePoint) * *(&Lcoordinates.x + i) * faceQuadratureFormula[k].weight;
-                localRhs[i] += aux;
+                localRhs(i) += aux;
             }
         }
 
@@ -76,7 +76,7 @@ void PoissonIntegrator::assembleSystem(SparseMatrixCSR &csrMatrix, deviceVector<
 {
     unsigned int blocks = blocksForSize(mesh.getCells().size);
 
-    kIntegrateOverCell<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, cellArea.data, invJacobi.data,
+    kIntegrateOverCell<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, mesh.getCellArea().data, mesh.getInvJacobi().data,
         csrMatrix.getRowOffset(), csrMatrix.getColIndices(), csrMatrix.getMatrixValues(), rhsVector.data);
 }
 
@@ -136,7 +136,7 @@ int main(int argc, char *argv[]){
 
     deviceVector<double> rhsVector;
     rhsVector.allocate(problemSize);
-    zero_value_device(rhsVector.data, problemSize);
+    rhsVector.clearValues();
 
     timer.start();
 

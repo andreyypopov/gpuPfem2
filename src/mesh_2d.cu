@@ -6,6 +6,32 @@
 #include <fstream>
 #include <vector>
 
+__global__ void kCalculateCellArea(int n, const Point2 *vertices, const uint3 *cells, double *areas){
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n){
+        const uint3 triangle = cells[idx];
+        const Point2 v12 = vertices[triangle.y] - vertices[triangle.x];
+        const Point2 v13 = vertices[triangle.z] - vertices[triangle.x];
+
+        areas[idx] = fabs(cross(v12, v13)) * 0.5;
+    }
+}
+
+__global__ void kCalculateInvJacobi(int n, const Point2 *vertices, const uint3 *cells, Matrix2x2 *invJacobi){
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n){
+        const uint3 triangle = cells[idx];
+        const Point2 v13 = vertices[triangle.z] - vertices[triangle.x];
+        const Point2 v23 = vertices[triangle.z] - vertices[triangle.y];
+
+        Matrix2x2 Jacobi;
+        Jacobi(0, 0) = v13.x;   Jacobi(0, 1) = v13.y;
+        Jacobi(1, 0) = v23.x;   Jacobi(1, 1) = v23.y;
+        
+        invJacobi[idx] = Jacobi.inverse();
+    }
+}
+
 bool Mesh2D::loadMeshFromFile(const std::string &filename, double scale)
 {
     std::ifstream meshFile(filename);
@@ -54,6 +80,8 @@ bool Mesh2D::loadMeshFromFile(const std::string &filename, double scale)
         copy_h2d(hostCells.data(), cells.data, cells.size);
         set_value_device(edgeBoundaryIDs.data, -1, cells.size);
 
+        initMesh();
+
         printf("Loaded mesh with %d vertices and %d cells\n", numVertices, numCells);
 
         return true;
@@ -61,4 +89,13 @@ bool Mesh2D::loadMeshFromFile(const std::string &filename, double scale)
         printf("Error while opening the file\n");
         return false;
     }
+}
+
+void Mesh2D::initMesh()
+{
+    cellArea.allocate(cells.size);
+    invJacobi.allocate(cells.size);
+    unsigned int blocks = blocksForSize(cells.size);
+    kCalculateCellArea<<<blocks, gpuThreads>>>(cells.size, vertices.data, cells.data, cellArea.data);
+    kCalculateInvJacobi<<<blocks, gpuThreads>>>(cells.size, vertices.data, cells.data, invJacobi.data);
 }

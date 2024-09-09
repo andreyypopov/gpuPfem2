@@ -2,6 +2,7 @@
 #define CUDA_MATH_CUH
 
 #include "constants.h"
+#include "matrix3x3.cuh"
 
 #include <cstdio>
 
@@ -90,37 +91,6 @@ __host__ __device__ inline Point2 GivensRotation(const double &v1, const double 
     return res;
 }
 
-class SymmetricMatrix3x3
-{
-public:
-    __host__ __device__ inline SymmetricMatrix3x3()
-    {
-        for (int i = 0; i < 6; ++i)
-            data[i] = 0.0;
-    }
-
-    __host__ __device__ inline double& operator()(int i, int j)
-    {
-        if (i == j)
-            return data[i];
-        else {
-            return data[2 + i + j];
-        }
-    }
-
-    __host__ __device__ inline const double& operator()(int i, int j) const
-    {
-        if (i == j)
-            return data[i];
-        else {
-            return data[2 + i + j];
-        }
-    }
-
-private:
-    double data[6];
-};
-
 class Matrix2x2
 {
 public:
@@ -172,6 +142,17 @@ public:
     __host__ __device__ inline const double& operator()(int i, int j) const
     {
         return data[i * 2 + j];
+    }
+
+    __host__ __device__ inline Matrix2x2 transpose() const
+    {
+        Matrix2x2 res;
+        res(0, 0) = data[0];
+        res(1, 0) = data[1];
+        res(0, 1) = data[2];
+        res(1, 1) = data[3];
+
+        return res;
     }
 
 private:

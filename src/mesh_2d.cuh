@@ -13,6 +13,8 @@ class Mesh2D
 public:
     bool loadMeshFromFile(const std::string &filename, double scale = 1.0);
 
+    void initMesh();
+
     const auto &getVertices() const {
         return vertices;
     }
@@ -23,6 +25,14 @@ public:
 
     const auto &getEdgeBoundaryIDs() const {
         return edgeBoundaryIDs;
+    }
+
+    const auto &getCellArea() const {
+        return cellArea;
+    }
+
+    const auto &getInvJacobi() const {
+        return invJacobi;
     }
 
     const auto &getHostVertices() const {
@@ -37,6 +47,9 @@ private:
     deviceVector<Point2> vertices;               //!< Vector of vertices coordinates
     deviceVector<uint3> cells;                   //!< Vector of indices of vertices describing each cell
     deviceVector<int3> edgeBoundaryIDs;          //!< Vector of boundary IDs for edges of each triangle
+
+    deviceVector<double> cellArea;
+    deviceVector<Matrix2x2> invJacobi;
 
     std::vector<Point2> hostVertices;
     std::vector<uint3> hostCells;

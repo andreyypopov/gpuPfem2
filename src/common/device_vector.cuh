@@ -119,6 +119,10 @@ public:
             return false;
     }
 
+    void clearValues(){
+        zero_value_device(data, size);
+    }
+
 private:
     /*!
      * @brief Free the device memory

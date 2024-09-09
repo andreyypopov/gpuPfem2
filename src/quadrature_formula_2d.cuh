@@ -7,10 +7,6 @@
 
 #include <vector>
 
-__device__ inline Point2 faceQuadraturePoint(const Point3 &Lcoordinates, const Point2 *triangleVertices){
-	return Lcoordinates.x * triangleVertices[0] + Lcoordinates.y * triangleVertices[1] + Lcoordinates.z * triangleVertices[2];
-}
-
 struct GaussPoint2D {
 	Point3 coordinates;
 	double weight;

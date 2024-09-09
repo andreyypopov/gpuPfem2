@@ -46,6 +46,7 @@ SET(header_common_files
 	${PROJECT_SOURCE_PATH}/common/cuda_memory.cuh
 	${PROJECT_SOURCE_PATH}/common/device_vector.cuh
 	${PROJECT_SOURCE_PATH}/common/gpu_timer.cuh
+	${PROJECT_SOURCE_PATH}/common/matrix3x3.cuh
 	)
 
 source_group("gpuFem" FILES
