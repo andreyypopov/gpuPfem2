@@ -21,12 +21,12 @@ __global__ void kCalculateInvJacobi(int n, const Point2 *vertices, const uint3 *
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if(idx < n){
         const uint3 triangle = cells[idx];
-        const Point2 v13 = vertices[triangle.z] - vertices[triangle.x];
-        const Point2 v23 = vertices[triangle.z] - vertices[triangle.y];
+        const Point2 v31 = vertices[triangle.x] - vertices[triangle.z];
+        const Point2 v32 = vertices[triangle.y] - vertices[triangle.z];
 
         Matrix2x2 Jacobi;
-        Jacobi(0, 0) = v13.x;   Jacobi(0, 1) = v13.y;
-        Jacobi(1, 0) = v23.x;   Jacobi(1, 1) = v23.y;
+        Jacobi(0, 0) = v31.x;   Jacobi(0, 1) = v31.y;
+        Jacobi(1, 0) = v32.x;   Jacobi(1, 1) = v32.y;
         
         invJacobi[idx] = Jacobi.inverse();
     }
