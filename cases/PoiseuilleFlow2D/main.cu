@@ -20,6 +20,22 @@ __constant__ int edgeQuadraturePointsNum;
 
 __constant__ SimulationParameters simParams;
 
+__device__ Point2 normalVector(int boundaryID) {
+    switch (boundaryID)
+    {
+    case 0:
+        return { -1.0, 0.0 };
+    case 1:
+        return { 1.0, 0.0 };
+    case 2:
+        return { 0.0, -1.0 };
+    case 3:
+        return { 0.0, 1.0 };
+    default:
+        return { 0.0, 0.0 };
+    }
+}
+
 __global__ void kSetEdgeBoundaryIDs(int n, const Point2 *vertices, const uint3 *cells, int3 *edgeBoundaryIDs)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -32,16 +48,16 @@ __global__ void kSetEdgeBoundaryIDs(int n, const Point2 *vertices, const uint3 *
         triangleVertices[1] = vertices[triangle.y];
         triangleVertices[2] = vertices[triangle.z];
 
-        int3 res;
+        int3 res = { -1, -1, -1 };
         for (int i = 0; i < 3; ++i) {
             Point2 start = triangleVertices[i];
             Point2 end = triangleVertices[(i + 1) % 3];
 
             Point2 middle = 0.5 * (start + end);
 
-            if (std::fabs(middle.x - (-1.0)) < CONSTANTS::DOUBLE_MIN)
+            if (std::fabs(middle.x - (-5.0)) < CONSTANTS::DOUBLE_MIN)
                 *(&res.x + i) = 0;
-            else if (std::fabs(middle.x - 1.0) < CONSTANTS::DOUBLE_MIN)
+            else if (std::fabs(middle.x - 5.0) < CONSTANTS::DOUBLE_MIN)
                 *(&res.x + i) = 1;
             else if (std::fabs(middle.y) < CONSTANTS::DOUBLE_MIN)
                 *(&res.x + i) = 2;
@@ -109,29 +125,30 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, cons
         const int3 boundaryIDs = edgeBoundaryIDs[idx];
         for (int edge = 0; edge < 3; ++edge) {
             const int boundaryID = *(&boundaryIDs.x + edge);
-            if (boundaryID == 0 || boundaryID == 1) {
-                const double normalX = (boundaryID == 0) ? -1.0 : 1.0;
-                const Point2 start = triangleVertices[edge];
-                const Point2 end = triangleVertices[(edge + 1) % 3];
+            if (boundaryID == -1)
+                continue;
 
-                for (int qp = 0; qp < edgeQuadraturePointsNum; ++qp) {
-                    const Point2 quadraturePoint = edgeQuadraturePoint(start, end, edgeQuadratureFormula[qp].coordinate);
-                    const Point3 Lcoordinates = transformGlobalToLocal(quadraturePoint, cellInvJacobi, triangleVertices[2]);
+            const Point2 normalVec = normalVector(boundaryID);
+            const Point2 start = triangleVertices[edge];
+            const Point2 end = triangleVertices[(edge + 1) % 3];
 
-                    aux = simParams.mu * simParams.dt * edgeQuadratureFormula[qp].weight;
+            for (int qp = 0; qp < edgeQuadraturePointsNum; ++qp) {
+                const Point2 quadraturePoint = edgeQuadraturePoint(start, end, edgeQuadratureFormula[qp].coordinate);
+                const Point3 Lcoordinates = transformGlobalToLocal(quadraturePoint, cellInvJacobi, triangleVertices[2]);
 
-                    for (int i = 0; i < 3; ++i) {
-                        const double shapeValueI = *(&Lcoordinates.x + i);
+                aux = simParams.mu * simParams.dt * edgeQuadratureFormula[qp].weight;
 
-                        for (int j = 0; j < 3; ++j) {
-                            const Point2 shapeGradJ = cellInvJacobi * shapeFuncGrad(j);
+                for (int i = 0; i < 3; ++i) {
+                    const double shapeValueI = *(&Lcoordinates.x + i);
 
-                            localMatrix[0](i, j) -= aux * shapeValueI * (4.0 / 3.0) * shapeGradJ.x * normalX;
-                            localMatrix[1](i, j) -= aux * shapeValueI * shapeGradJ.x * normalX;
+                    for (int j = 0; j < 3; ++j) {
+                        const Point2 shapeGradJ = cellInvJacobi * shapeFuncGrad(j);
 
-                            localRhs[0](i) += aux * shapeValueI * (-2.0 / 3.0) * shapeGradJ.y * normalX * velocity[1][*(&triangle.x + j)];
-                            localRhs[1](i) += aux * shapeValueI * shapeGradJ.y * normalX * velocity[0][*(&triangle.x + j)];
-                        }
+                        localMatrix[0](i, j) -= aux * shapeValueI * ((4.0 / 3.0) * shapeGradJ.x * normalVec.x + shapeGradJ.y * normalVec.y);
+                        localMatrix[1](i, j) -= aux * shapeValueI * (shapeGradJ.x * normalVec.x + (4.0 / 3.0) * shapeGradJ.y * normalVec.y);
+
+                        localRhs[0](i) += aux * shapeValueI * velocity[1][*(&triangle.x + j)] * ((-2.0 / 3.0) * shapeGradJ.y * normalVec.x + shapeGradJ.x * normalVec.y);
+                        localRhs[1](i) += aux * shapeValueI * velocity[0][*(&triangle.x + j)] * (shapeGradJ.y * normalVec.x + (-2.0 / 3.0) * shapeGradJ.x * normalVec.y);
                     }
                 }
             }
@@ -225,6 +242,78 @@ __global__ void kIntegrateVelocityCorrection(int n, const Point2* vertices, cons
         addLocalToGlobal(triangle, area, localMatrix[0], localRhs[0], rowOffset[0], colIndices[0], matrixValues[0], rhsVector[0]);
         addLocalToGlobal(triangle, area, localMatrix[1], localRhs[1], rowOffset[1], colIndices[1], matrixValues[1], rhsVector[1]);
     }
+}
+
+__global__ void kAccumulatePressureGradient(int n, const uint3* cells, double* areas, Matrix2x2* invJacobi,
+    const double* pressure, const int* DirichletNodesMap, double *numerator, double *denominator, int component)
+{
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < n) {
+        const uint3 triangle = cells[idx];
+
+        if (DirichletNodesMap[triangle.x] == -1 && DirichletNodesMap[triangle.y] == -1 && DirichletNodesMap[triangle.z] == -1)
+            return;
+
+        const double area = areas[idx];
+        const Matrix2x2 cellInvJacobi = invJacobi[idx];
+
+        Point2 cellGradient = { 0.0, 0.0 };
+        for (int i = 0; i < 3; ++i)
+            cellGradient += pressure[*(&triangle.x + i)] * shapeFuncGrad(i);
+
+        cellGradient = cellInvJacobi * cellGradient;
+
+        for (int i = 0; i < 3; ++i) {
+            const unsigned int nodeI = *(&triangle.x + i);
+            if (DirichletNodesMap[nodeI] != -1) {
+                atomicAdd(&numerator[DirichletNodesMap[nodeI]], area * *(&cellGradient.x + component));
+                atomicAdd(&denominator[DirichletNodesMap[nodeI]], area);
+            }
+        }
+    }
+}
+
+__global__ void kFinalizePredictionBC(int n, DirichletNode* targetValues, const DirichletNode* sourceValues, const double* numerator, const double* denominator)
+{
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < n)
+        targetValues[idx].bcValue = sourceValues[idx].bcValue + simParams.dt / simParams.rho * numerator[idx] / denominator[idx];
+}
+
+class VelocityDirichletBCs : public DirichletBCs
+{
+public:
+    VelocityDirichletBCs()
+        : DirichletBCs() {};
+
+    void setMesh(const Mesh2D& mesh_) {
+        mesh = &mesh_;
+        numerator.allocate(DirichletValues.size);
+        denominator.allocate(DirichletValues.size);
+    }
+
+    void setDirichletValues(const DirichletBCs &VelocityBC, const deviceVector<double> &pressure, int component);
+
+private:
+    const Mesh2D *mesh = nullptr;
+
+    deviceVector<double> numerator, denominator;
+};
+
+void VelocityDirichletBCs::setDirichletValues(const DirichletBCs& VelocityBC, const deviceVector<double>& pressure, int component)
+{
+    numerator.clearValues();
+    denominator.clearValues();
+
+    unsigned int blocks = blocksForSize(mesh->getCells().size);
+    kAccumulatePressureGradient<<<blocks, gpuThreads>>>(mesh->getCells().size, mesh->getCells().data, mesh->getCellArea().data, mesh->getInvJacobi().data,
+        pressure.data, nodesToDirichletNodes.data, numerator.data, denominator.data, component);
+
+    blocks = blocksForSize(DirichletValues.size);
+    kFinalizePredictionBC<<<blocks, gpuThreads>>> (DirichletValues.size, DirichletValues.data, VelocityBC.getDirichletValues(),
+        numerator.data, denominator.data);
 }
 
 class PoiseuilleFlowIntegrator : public NumericalIntegrator2D
@@ -373,7 +462,7 @@ int main(int argc, char *argv[]){
     timer.start();
 
     Mesh2D mesh;
-    if(!mesh.loadMeshFromFile("../TestProblem2.dat"))
+    if(!mesh.loadMeshFromFile("../ChannelMesh.dat"))
         return EXIT_FAILURE;
 
     unsigned int blocks = blocksForSize(mesh.getCells().size);
@@ -383,7 +472,8 @@ int main(int argc, char *argv[]){
 
     const int problemSize = mesh.getVertices().size;
 
-    std::array<DirichletBCs, 2> velocityBCs, velocityPredictionBCs;
+    std::array<DirichletBCs, 2> velocityBCs;
+    std::array<VelocityDirichletBCs, 2> velocityPredictionBCs;
     DirichletBCs pressureBCs;
     
     timer.start();
@@ -401,11 +491,12 @@ int main(int argc, char *argv[]){
         for (unsigned i = 0; i < vertices.size(); ++i) {
             const Point2& node = vertices[i];
 
-            if (std::fabs(node.x - (-1.0)) < CONSTANTS::DOUBLE_MIN) {
-                //hostVelocityBCs[0].push_back({ i, 1.0 });
-                hostVelocityBCs[0].push_back({ i, 6 * node.y * (1.0 - node.y) });
-                hostVelocityBCs[1].push_back({ i, 0.0 });
-            } else if (std::fabs(node.x - 1.0) < CONSTANTS::DOUBLE_MIN)
+            if (std::fabs(node.x - (-5.0)) < CONSTANTS::DOUBLE_MIN) {
+                //hostVelocityBCs[0].push_back({ i, 1.0 });								//option 1 (velocity-driven, constant velocity)
+                //hostVelocityBCs[0].push_back({ i, 6 * node.y * (1.0 - node.y) });		//option 2 (velocity-driven, parabolic velocity)
+                //hostVelocityBCs[1].push_back({ i, 0.0 });								//options 1 and 2
+                hostPressureBCs.push_back({ i, 10.0 });									//option 3 (pressure-driven)
+            } else if (std::fabs(node.x - 5.0) < CONSTANTS::DOUBLE_MIN)
                 hostPressureBCs.push_back({ i, 0.0 });
             else if ((std::fabs(node.y) < CONSTANTS::DOUBLE_MIN) || (std::fabs(node.y - 1.0) < CONSTANTS::DOUBLE_MIN)) {
                 hostVelocityBCs[0].push_back({i, 0.0});
@@ -416,6 +507,8 @@ int main(int argc, char *argv[]){
         for (int i = 0; i < 2; ++i) {
             velocityBCs[i].setupDirichletBCs(hostVelocityBCs[i]);
             velocityPredictionBCs[i].setupDirichletBCs(hostVelocityBCs[i]);
+            velocityPredictionBCs[i].setMesh(mesh);
+            velocityPredictionBCs[i].setupNodeMap(problemSize, hostVelocityBCs[i]);
         }
         pressureBCs.setupDirichletBCs(hostPressureBCs);
     }
@@ -434,7 +527,7 @@ int main(int argc, char *argv[]){
     SimulationParameters hostParams;
     hostParams.setDefaultParameters();
     hostParams.dt = 0.01;
-    hostParams.tFinal = 0.5;
+    hostParams.tFinal = 5.0;
     hostParams.outputFrequency = 10;
     copy_h2const(&hostParams, &simParams, 1);
 
@@ -508,7 +601,8 @@ int main(int argc, char *argv[]){
             }
             integrator.assembleVelocityPrediction();
             for (int i = 0; i < 2; ++i) {
-                velocityBCs[i].applyBCs(velocityPredictionMatrix[i], velocityPredictionRhs[i]);
+                velocityPredictionBCs[i].setDirichletValues(velocityBCs[i], pressureSolution, i);
+                velocityPredictionBCs[i].applyBCs(velocityPredictionMatrix[i], velocityPredictionRhs[i]);
                 gmresSolver.solve(velocityPredictionMatrix[i], velocityPrediction[i], velocityPredictionRhs[i]);
             }
             timer.stop("Velocity prediction");
