@@ -10,6 +10,7 @@
 
 #include "common/cuda_math.cuh"
 #include "common/gpu_timer.cuh"
+#include "common/utilities.h"
 
 #include <vector>
 
@@ -582,7 +583,7 @@ int main(int argc, char *argv[]){
     dataExport.addScalarDataVector(velocityPrediction[1], "velPredictionY");
     dataExport.addScalarDataVector(pressureSolution, "pressure");
     
-    dataExport.exportToVTK("solution0.vtu");
+    dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");
 
     //time loop
     unsigned int step_number = 1;
@@ -631,7 +632,7 @@ int main(int argc, char *argv[]){
         }
 
         if(step_number % hostParams.outputFrequency == 0)
-            dataExport.exportToVTK(std::string("solution" + std::to_string(step_number) + ".vtu"));
+            dataExport.exportToVTK("solution" + Utilities::intToString(step_number) + ".vtu");
     }
 
     return EXIT_SUCCESS;

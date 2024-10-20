@@ -27,6 +27,7 @@ SET(src_files
 SET(src_common_files
 	${PROJECT_SOURCE_PATH}/common/cuda_helper.cu
 	${PROJECT_SOURCE_PATH}/common/cuda_math.cu
+	${PROJECT_SOURCE_PATH}/common/utilities.cpp
 )
 SET(header_files
 	${PROJECT_SOURCE_PATH}/data_export.cuh
@@ -47,6 +48,7 @@ SET(header_common_files
 	${PROJECT_SOURCE_PATH}/common/device_vector.cuh
 	${PROJECT_SOURCE_PATH}/common/gpu_timer.cuh
 	${PROJECT_SOURCE_PATH}/common/matrix3x3.cuh
+	${PROJECT_SOURCE_PATH}/common/utilities.h
 	)
 
 source_group("gpuFem" FILES
