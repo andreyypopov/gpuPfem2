@@ -9,6 +9,7 @@ DataExport::DataExport(const Mesh2D &mesh)
 void DataExport::addScalarDataVector(const deviceVector<double> &dataVector, const std::string &fieldname)
 {
     scalarDataVectors[fieldname] = dataVector.data;
+    hostScalarDataVectors[fieldname].resize(mesh.getHostVertices().size());
 }
 
 void DataExport::exportToVTK(const std::string &filename) const
@@ -62,13 +63,13 @@ void DataExport::exportToVTK(const std::string &filename) const
     if(!scalarDataVectors.empty()){
         outputFile << "      <PointData Scalars=\"scalars\">" << std::endl;
 
-        std::vector<double> hostData(hostVertices.size());
-
         for(const auto& it : scalarDataVectors){
             outputFile << "        <DataArray type=\"Float32\" Name=\"" << it.first << "\" Format=\"ascii\">" << std::endl;
             outputFile << "        ";
 
-            copy_d2h(it.second, hostData.data(), hostData.size());
+            const double *hostData = hostScalarDataVectors.at(it.first).data();
+
+            copy_d2h(it.second, hostData, hostVertices.size());
 
             for(int i = 0; i < hostVertices.size(); ++i)
                 outputFile << hostData[i] << "  ";

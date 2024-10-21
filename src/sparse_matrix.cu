@@ -5,7 +5,7 @@
 #include <set>
 #include <vector>
 
-SparseMatrixCSR::SparseMatrixCSR(const Mesh2D &mesh)
+void SparseMatrixCSR::initialize(const Mesh2D &mesh)
 {
     rows = mesh.getHostVertices().size();
     const int nCells = mesh.getHostCells().size();
@@ -50,7 +50,7 @@ SparseMatrixCSR::SparseMatrixCSR(const Mesh2D &mesh)
 
     copy_h2d(hostRowOffset.data(), rowOffset.data, rows + 1);
     copy_h2d(hostColIndices.data(), colIndices.data, totalElements);
-    zero_value_device(matrixValues.data, totalElements);
+    clearValues();
 }
 
 bool SparseMatrixCSR::exportMatrix(const std::string& filename) const

@@ -170,6 +170,21 @@ void LinearSolver::init(const SparseMatrixCSR& matrix, bool usePreconditioning) 
         matrix.getRowOffset(), matrix.getColIndices(), matrix.getMatrixValues(),
         CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
         CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F));
+
+    csrMatrix = &matrix;
+}
+
+bool LinearSolver::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b)
+{
+    if(csrMatrix != &A){
+        csrMatrix = &A;
+        checkCusparseErrors(cusparseCsrSetPointers(matA, A.getRowOffset(), A.getColIndices(), A.getMatrixValues()));
+    }
+
+    if(usePreconditioning)
+        extractDiagonal<<<gpuBlocks, gpuThreads>>>(n, invDiagValues.data, A.getRowOffset(), A.getColIndices(), A.getMatrixValues());
+
+    return true;
 }
 
 SolverCG::SolverCG(double tolerance, int max_iterations)
@@ -250,7 +265,7 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
         extractDiagonal<<<gpuBlocks, gpuThreads>>>(n, invDiagValues.data, A.getRowOffset(), A.getColIndices(), A.getMatrixValues());
 
     //x0 = 0
-    zero_value_device(x.data, n);
+    x.clearValues();
     //r0 = b - A*x0 = b;
     copy_d2d(b.data, rk.data, n);
 
@@ -266,6 +281,13 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
     double *v = usePreconditioning ? uk.data : rk.data;
     //gamma0 = (r0, u0)
     checkCublasErrors(cublasDdot(cublasHandle, n, rk.data, 1, v, 1, gamma_kp));
+
+    copy_d2h(gamma_kp, &residual_norm, 1);
+    if(residual_norm < tolerance_squared){
+        printf("Solver converged with residual=%e, no. of iterations=0\n", std::sqrt(residual_norm));
+        return true;
+    }
+
     //delta0 = (w0, u0)
     checkCublasErrors(cublasDdot(cublasHandle, n, wk.data, 1, v, 1, delta_k));
     //alpha0 = delta0 / gamma0; beta0 = 0
@@ -313,11 +335,10 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
 bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b){
     bool converged = false;
 
-    if(usePreconditioning)
-        extractDiagonal<<<gpuBlocks, gpuThreads>>>(n, invDiagValues.data, A.getRowOffset(), A.getColIndices(), A.getMatrixValues());
+    LinearSolver::solve(A, x, b);
 
     //x0 = 0
-    zero_value_device(x.data, n);
+    x.clearValues();
     //r0 = b - A*x0 = b;
     copy_d2d(b.data, rk.data, n);
 
@@ -330,6 +351,12 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
 
     //(r_0, z_0)
     checkCublasErrors(cublasDdot(cublasHandle, n, rk.data, 1, v, 1, gamma_kp));
+
+    copy_d2h(gamma_kp, &residual_norm, 1);
+    if(residual_norm < tolerance_squared){
+        printf("Solver converged with residual=%e, no. of iterations=0\n", std::sqrt(residual_norm));
+        return true;
+    }
 
     int it = 0;
     while(it < maxIterations){
@@ -424,11 +451,10 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
 {
     bool converged = false;
 
-    if(usePreconditioning)
-        extractDiagonal<<<gpuBlocks, gpuThreads>>>(n, invDiagValues.data, A.getRowOffset(), A.getColIndices(), A.getMatrixValues());
-
+    LinearSolver::solve(A, x, b);
+    
     //x0 = 0
-    zero_value_device(x.data, n);
+    x.clearValues();
 
     v_kp = Vmatrix.data;
     copy_d2d(b.data, v_kp, n);
@@ -439,6 +465,12 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
 
     //compute ||r0||, which becomes first element of the beta vector
     checkCublasErrors(cublasDnrm2(cublasHandle, n, v_kp, 1, beta.data));
+
+    copy_d2h(beta.data, &residual_norm, 1);
+    if (residual_norm < tolerance) {
+        printf("Solver converged with residual=%e, no. of iterations=0\n", residual_norm);
+        return true;
+    }
 
     //V1 = r0 / ||r0|| = b / ||b|| (or with preconditioner applied)
     scaleVector<<<gpuBlocks, gpuThreads>>>(n, v_kp, v_kp, beta.data, true);

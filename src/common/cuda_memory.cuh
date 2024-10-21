@@ -74,6 +74,11 @@ void zero_value_device(T* ptr, size_t elements_num, cudaStream_t stream = nullpt
     checkCudaErrors(cudaMemsetAsync(ptr, 0, elements_num * sizeof(T), stream));
 }
 
+template<class T>
+void set_value_device(T* ptr, int value, size_t elements_num, cudaStream_t stream = nullptr){
+    checkCudaErrors(cudaMemsetAsync(ptr, value, elements_num * sizeof(T), stream));
+}
+
 /*!
  * @brief Copy data from host to device memory
  * 

@@ -58,6 +58,18 @@ void DirichletBCs::setupDirichletBCs(const std::vector<DirichletNode> &hostBcs)
     printf("Number of boundary nodes: %zu\n", hostBcs.size());
 }
 
+void DirichletBCs::setupNodeMap(int n, const std::vector<DirichletNode> &hostBCs)
+{
+    nodesToDirichletNodes.allocate(n);
+    std::vector<int> hostMap(n, -1);
+
+#pragma omp parallel for
+    for(int i = 0; i < hostBCs.size(); ++i)
+        hostMap[hostBCs[i].nodeIdx] = i;
+
+    copy_h2d(hostMap.data(), nodesToDirichletNodes.data, n);
+}
+
 void DirichletBCs::applyBCs(SparseMatrixCSR& matrix, deviceVector<double>& rhs)
 {
     //1. For the rows of the matrix that correspond to boundary DoFs set diagonal element = 1, off-diagonal elements = 0

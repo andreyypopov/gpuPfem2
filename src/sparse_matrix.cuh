@@ -1,13 +1,19 @@
 #ifndef SPARSE_MATRIX_CUH
 #define SPARSE_MATRIX_CUH
 
+#include "common/cuda_memory.cuh"
 #include "common/device_vector.cuh"
 #include "mesh_2d.cuh"
 
 class SparseMatrixCSR
 {
 public:
-    explicit SparseMatrixCSR(const Mesh2D &mesh);
+    SparseMatrixCSR() = default;
+    explicit SparseMatrixCSR(const Mesh2D &mesh){
+        initialize(mesh);
+    };
+
+    void initialize(const Mesh2D &mesh);
 
     int* getRowOffset() const {
         return rowOffset.data;
@@ -30,6 +36,10 @@ public:
     }
 
     bool exportMatrix(const std::string& filename) const;
+
+    void clearValues(){
+        matrixValues.clearValues();
+    }
 
 private:
     int rows;

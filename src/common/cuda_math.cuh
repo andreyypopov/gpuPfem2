@@ -2,6 +2,9 @@
 #define CUDA_MATH_CUH
 
 #include "constants.h"
+#include "matrix3x3.cuh"
+
+#include <cstdio>
 
 typedef double2 Point2;
 typedef double3 Point3;
@@ -88,31 +91,69 @@ __host__ __device__ inline Point2 GivensRotation(const double &v1, const double 
     return res;
 }
 
-class SymmetricMatrix3x3
-{
-public:
-    __host__ __device__ SymmetricMatrix3x3();
-
-    __host__ __device__ double &operator()(int i, int j);
-    __host__ __device__ const double &operator()(int i, int j) const;
-
-private:
-    double data[6];
-};
-
 class Matrix2x2
 {
 public:
-    __host__ __device__ Matrix2x2();
+    __host__ __device__ inline Matrix2x2()
+    {
+        for (int i = 0; i < 4; ++i)
+            data[i] = 0.0;
+    }
 
-    __host__ __device__ Matrix2x2 inverse() const;
+    __host__ __device__ inline Matrix2x2 inverse() const
+    {
+        Matrix2x2 res;
 
-    __host__ __device__ double det() const;
+        const double detA = det();
+        if (fabs(detA) < CONSTANTS::DOUBLE_MIN)
+            printf("det = %f\n", detA);
+        //    return res;
 
-    __host__ __device__ Point2 operator*(const Point2 vec) const;
+        const double invdet = 1.0 / detA;
 
-    __host__ __device__ double& operator()(int i, int j);
-    __host__ __device__ const double& operator()(int i, int j) const;
+        res(0, 0) = data[3] * invdet;
+        res(0, 1) = -data[1] * invdet;
+        res(1, 0) = -data[2] * invdet;
+        res(1, 1) = data[0] * invdet;
+
+        return res;
+    }
+
+    __host__ __device__ inline double det() const
+    {
+        return data[0] * data[3] - data[1] * data[2];
+    }
+
+    __host__ __device__ inline Point2 operator*(const Point2 vec) const
+    {
+        Point2 res({ 0.0, 0.0 });
+
+        res.x = data[0] * vec.x + data[1] * vec.y;
+        res.y = data[2] * vec.x + data[3] * vec.y;
+
+        return res;
+    }
+
+    __host__ __device__ inline double& operator()(int i, int j)
+    {
+        return data[i * 2 + j];
+    }
+
+    __host__ __device__ inline const double& operator()(int i, int j) const
+    {
+        return data[i * 2 + j];
+    }
+
+    __host__ __device__ inline Matrix2x2 transpose() const
+    {
+        Matrix2x2 res;
+        res(0, 0) = data[0];
+        res(1, 0) = data[1];
+        res(0, 1) = data[2];
+        res(1, 1) = data[3];
+
+        return res;
+    }
 
 private:
     double data[4];

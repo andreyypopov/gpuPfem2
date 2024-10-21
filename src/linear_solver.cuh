@@ -18,7 +18,7 @@ public:
 
     virtual void init(const SparseMatrixCSR& matrix, bool usePreconditioning = false);
 
-    virtual bool solve(const SparseMatrixCSR& A, deviceVector<double>& x, const deviceVector<double>& b) = 0;
+    virtual bool solve(const SparseMatrixCSR& A, deviceVector<double>& x, const deviceVector<double>& b);
 
 protected:
     //cusparse and cublas handles
@@ -28,6 +28,8 @@ protected:
     cusparseDnVecDescr_t vecX, vecY;
     void* dBuffer;
     double aSpmv, bSpmv;                //coefficients used in SPMV
+
+    const SparseMatrixCSR *csrMatrix = nullptr;
 
     deviceVector<double> invDiagValues;
 

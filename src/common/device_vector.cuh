@@ -20,6 +20,13 @@ template<class T>
 struct deviceVector
 {
 public:
+    deviceVector<T>(){};
+    
+    deviceVector<T>(const std::vector<T> &hostVector){
+        allocate(hostVector.size());
+        copy_h2d(hostVector.data(), data, hostVector.size());
+    }
+
     T *data = nullptr;      //!< Raw pointer to the array
     int size = 0;           //!< Exact size of the data (can be changed manually)
     int capacity = 0;       //!< Allocated capacity of the array
@@ -110,6 +117,10 @@ public:
             return true;
         } else
             return false;
+    }
+
+    void clearValues(){
+        zero_value_device(data, size);
     }
 
 private:
