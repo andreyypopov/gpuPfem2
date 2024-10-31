@@ -12,6 +12,8 @@
 #include "common/gpu_timer.cuh"
 #include "common/utilities.h"
 
+#include "particles/particle_handler_2d.cuh"
+
 #include <vector>
 
 __constant__ GaussPoint2D faceQuadratureFormula[CONSTANTS::MAX_GAUSS_POINTS];
@@ -470,6 +472,13 @@ int main(int argc, char *argv[]){
     kSetEdgeBoundaryIDs<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, mesh.getEdgeBoundaryIDs().data);
 
     timer.stop("Mesh import");
+
+    timer.start();
+
+    ParticleHandler2D particleHandler(&mesh, 2);
+    particleHandler.seedParticles();
+
+    timer.stop("Particle seeding");
 
     const int problemSize = mesh.getVertices().size;
 

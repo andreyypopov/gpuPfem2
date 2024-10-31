@@ -29,6 +29,10 @@ SET(src_common_files
 	${PROJECT_SOURCE_PATH}/common/cuda_math.cu
 	${PROJECT_SOURCE_PATH}/common/utilities.cpp
 )
+SET(src_particle_files
+	${PROJECT_SOURCE_PATH}/particles/particle_2d.cu
+	${PROJECT_SOURCE_PATH}/particles/particle_handler_2d.cu
+	)
 SET(header_files
 	${PROJECT_SOURCE_PATH}/data_export.cuh
 	${PROJECT_SOURCE_PATH}/Dirichlet_bcs.cuh
@@ -39,6 +43,10 @@ SET(header_files
 	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cuh
 	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cuh
 	${PROJECT_SOURCE_PATH}/sparse_matrix.cuh
+	)
+SET(header_particle_files
+	${PROJECT_SOURCE_PATH}/particles/particle_2d.cuh
+	${PROJECT_SOURCE_PATH}/particles/particle_handler_2d.cuh
 	)
 SET(header_common_files
 	${PROJECT_SOURCE_PATH}/common/constants.h
@@ -56,6 +64,11 @@ source_group("gpuFem" FILES
 	${header_files}
 )
 
+source_group("gpuFem/particles" FILES
+	${src_particle_files}
+	${header_particle_files}
+)
+
 source_group("gpuFem/common" FILES
 	${src_common_files}
 	${header_common_files}
@@ -65,7 +78,8 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_INSTALL_PREFIX "${PROJECT_ROOT_PATH}/install" CACHE PATH "Library installation path" FORCE)
 endif()
 
-add_library(gpuFemLib SHARED ${src_files} ${src_common_files} ${header_files} ${header_common_files})
+add_library(gpuFemLib SHARED ${src_files} ${src_particle_files} ${src_common_files} ${header_files}
+	${header_particle_files} ${header_common_files})
 
 setup_openmp(${PROJECT_NAME})
 setup_cuda(${PROJECT_NAME})
@@ -73,6 +87,7 @@ setup_cuda(${PROJECT_NAME})
 install(TARGETS gpuFemLib)
 install(FILES ${header_files} DESTINATION include)
 install(FILES ${header_common_files} DESTINATION include/common)
+install(FILES ${header_particle_files} DESTINATION include/particles)
 
 set_target_properties(gpuFemLib PROPERTIES VERSION 1.0)
 set_target_properties(gpuFemLib PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)

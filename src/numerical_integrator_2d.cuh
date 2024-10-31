@@ -1,5 +1,5 @@
-#ifndef NUMERICAL_INTEGRATOR_3D_CUH
-#define NUMERICAL_INTEGRATOR_3D_CUH
+#ifndef NUMERICAL_INTEGRATOR_2D_CUH
+#define NUMERICAL_INTEGRATOR_2D_CUH
 
 #include "common/constants.h"
 #include "mesh_2d.cuh"
@@ -69,4 +69,4 @@ protected:
 
 };
 
-#endif // NUMERICAL_INTEGRATOR_3D_CUH
+#endif // NUMERICAL_INTEGRATOR_2D_CUH
