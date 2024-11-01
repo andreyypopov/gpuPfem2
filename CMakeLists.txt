@@ -56,6 +56,7 @@ SET(header_common_files
 	${PROJECT_SOURCE_PATH}/common/device_vector.cuh
 	${PROJECT_SOURCE_PATH}/common/gpu_timer.cuh
 	${PROJECT_SOURCE_PATH}/common/matrix3x3.cuh
+	${PROJECT_SOURCE_PATH}/common/profiling.h
 	${PROJECT_SOURCE_PATH}/common/utilities.h
 	)
 

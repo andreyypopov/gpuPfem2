@@ -10,6 +10,7 @@
 
 #include "common/cuda_math.cuh"
 #include "common/gpu_timer.cuh"
+#include "common/profiling.h"
 #include "common/utilities.h"
 
 #include "particles/particle_handler_2d.cuh"
@@ -461,8 +462,9 @@ void PoiseuilleFlowIntegrator::assembleVelocityCorrection()
 
 int main(int argc, char *argv[]){
 	GpuTimer timer;
+    ProfilingScope pScope;
     
-    timer.start();
+    pScope.start("Mesh import");
 
     Mesh2D mesh;
     if(!mesh.loadMeshFromFile("../ChannelMesh.dat"))
@@ -471,14 +473,14 @@ int main(int argc, char *argv[]){
     unsigned int blocks = blocksForSize(mesh.getCells().size);
     kSetEdgeBoundaryIDs<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, mesh.getEdgeBoundaryIDs().data);
 
-    timer.stop("Mesh import");
+    pScope.stop();
 
-    timer.start();
+    pScope.start("Particle seeding");
 
     ParticleHandler2D particleHandler(&mesh, 2);
     particleHandler.seedParticles();
 
-    timer.stop("Particle seeding");
+    pScope.stop();
 
     const int problemSize = mesh.getVertices().size;
 
@@ -486,9 +488,9 @@ int main(int argc, char *argv[]){
     std::array<VelocityDirichletBCs, 2> velocityPredictionBCs;
     DirichletBCs pressureBCs;
     
-    timer.start();
-
     {
+        ProfilingScope scope("Boundary conditions setup");
+
         std::array<std::vector<DirichletNode>, 2> hostVelocityBCs;
         std::vector<DirichletNode> hostPressureBCs;
 
@@ -522,8 +524,6 @@ int main(int argc, char *argv[]){
         }
         pressureBCs.setupDirichletBCs(hostPressureBCs);
     }
-
-    timer.stop("Boundary conditions setup");
 
     const auto faceQuadratureGaussPoints = createFaceQuadratureFormula(1);
     const auto edgeQuadratureGaussPoints = createEdgeQuadratureFormula(1);
@@ -594,54 +594,77 @@ int main(int argc, char *argv[]){
     
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");
 
+    timer.start();
+
     //time loop
     unsigned int step_number = 1;
     for (double t = 0; t < hostParams.tFinal; t += hostParams.dt, ++step_number) {
         printf("\nTime step no. %u, time = %f\n", step_number, t);
+        ProfilingScope stepScope("Simulation step");
 
         for(int i = 0; i < 2; ++i)
             copy_d2d(velocitySolution[i].data, velocitySolutionOld[i].data, problemSize);
 
         for (int nOuterIter = 0; nOuterIter < 1; ++nOuterIter) {
             //assemble and solve velocity prediction equations
-            timer.start();
+            pScope.start("Velocity prediction");
+
+            pScope.start("Matrix assembly");
             for (int i = 0; i < 2; ++i) {
                 velocityPredictionMatrix[i].clearValues();
                 velocityPredictionRhs[i].clearValues();
             }
             integrator.assembleVelocityPrediction();
+            pScope.stop();
+            pScope.start("Linear solver");
             for (int i = 0; i < 2; ++i) {
                 velocityPredictionBCs[i].setDirichletValues(velocityBCs[i], pressureSolution, i);
                 velocityPredictionBCs[i].applyBCs(velocityPredictionMatrix[i], velocityPredictionRhs[i]);
                 gmresSolver.solve(velocityPredictionMatrix[i], velocityPrediction[i], velocityPredictionRhs[i]);
             }
-            timer.stop("Velocity prediction");
+            pScope.stop();
+            pScope.stop();
 
             //assemble and solve the pressure Poisson equation
-            timer.start();
+            pScope.start("Pressure equation");
+
+            pScope.start("Matrix assembly");
             pressureMatrix.clearValues();
             pressureRhs.clearValues();
             integrator.assemblePressureEquation();
             pressureBCs.applyBCs(pressureMatrix, pressureRhs);
+            pScope.stop();
+            pScope.start("Linear solver");
             cgSolver.solve(pressureMatrix, pressureSolution, pressureRhs);
-            timer.stop("Pressure equation");
+            pScope.stop();
+            pScope.stop();
 
             //assemble and solve velocity correction equations
-            timer.start();
+            pScope.start("Velocity correction");
+
+            pScope.start("Matrix assembly");
             for (int i = 0; i < 2; ++i) {
                 velocityCorrectionMatrix[i].clearValues();
                 velocityCorrectionRhs[i].clearValues();
             }
             integrator.assembleVelocityCorrection();
+            pScope.stop();
+            pScope.start("Linear solver");
             for (int i = 0; i < 2; ++i) {
                 velocityBCs[i].applyBCs(velocityCorrectionMatrix[i], velocityCorrectionRhs[i]);
                 cgSolver.solve(velocityCorrectionMatrix[i], velocitySolution[i], velocityCorrectionRhs[i]);
             }
-            timer.stop("Velocity correction");
+            pScope.stop();
+            pScope.stop();
         }
 
-        if(step_number % hostParams.outputFrequency == 0)
+        if (step_number % hostParams.outputFrequency == 0) {
+            ProfilingScope scope("Results output");
             dataExport.exportToVTK("solution" + Utilities::intToString(step_number) + ".vtu");
+        }
+
+        float2 times = timer.stop();
+        printf("Time of a simulation step: %6.3f ms, total time since start: %6.3f s\n", times.x, 0.001f * times.y);
     }
 
     return EXIT_SUCCESS;

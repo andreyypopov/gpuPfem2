@@ -55,7 +55,7 @@ public:
      * @param stream CUDA stream (optional)
      * @return Measured time in milliseconds
      */
-    float stop(const char *message = nullptr, cudaStream_t stream = nullptr){
+    float stop(const char *message, cudaStream_t stream = nullptr){
         if(stopEvent){
             checkCudaErrors(cudaEventRecord(stopEvent, stream));
             checkCudaErrors(cudaEventSynchronize(stopEvent));
@@ -71,9 +71,30 @@ public:
             return 0;
     }
 
+    float2 stop(cudaStream_t stream = nullptr){
+        float2 res;
+        
+        if(stopEvent){
+            checkCudaErrors(cudaEventRecord(stopEvent, stream));
+            checkCudaErrors(cudaEventSynchronize(stopEvent));
+
+            float time;
+            checkCudaErrors(cudaEventElapsedTime(&time, startEvent, stopEvent));
+
+            res.x = time - lastTime;
+            res.y = time;
+
+            lastTime = time;
+        }
+
+        return res;
+    }
+
 private:
     cudaEvent_t startEvent = nullptr;       //!< Start event
     cudaEvent_t stopEvent = nullptr;        //!< End event
+
+    float lastTime = 0.f;
 };
 
 #endif // GPU_TIMER_CUH
