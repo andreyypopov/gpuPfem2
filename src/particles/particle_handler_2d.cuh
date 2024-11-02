@@ -14,6 +14,14 @@ public:
 
     void seedParticles();
 
+    const Particle2D *getParticles() const {
+        return particles.data;
+    }
+
+    int getParticleCount() const {
+        return particleCount;
+    }
+
 private:
     const Mesh2D *mesh;
     

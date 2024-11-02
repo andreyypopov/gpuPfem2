@@ -6,6 +6,8 @@
 class Particle2D
 {
 public:
+    __host__ __device__ Particle2D(){ };
+
     __host__ __device__ Particle2D(const Point2 &position, const Point3 &localPosition, unsigned int ID = 0);
 
     unsigned int getID() const {

@@ -539,6 +539,7 @@ int main(int argc, char *argv[]){
     hostParams.dt = 0.01;
     hostParams.tFinal = 5.0;
     hostParams.outputFrequency = 10;
+    hostParams.exportParticles = 1;
     copy_h2const(&hostParams, &simParams, 1);
 
     //matrices, solution and right-hand-side vectors for both component of velocity field (prediction and final ones) and pressure
@@ -585,7 +586,7 @@ int main(int argc, char *argv[]){
     SolverGMRES gmresSolver(hostParams.tolerance, hostParams.maxIterations);
     gmresSolver.init(velocityCorrectionMatrix[0], true);
 
-    DataExport dataExport(mesh);
+    DataExport dataExport(mesh, &particleHandler);
     dataExport.addScalarDataVector(velocitySolution[0], "velX");
     dataExport.addScalarDataVector(velocitySolution[1], "velY");
     dataExport.addScalarDataVector(velocityPrediction[0], "velPredictionX");
@@ -593,6 +594,8 @@ int main(int argc, char *argv[]){
     dataExport.addScalarDataVector(pressureSolution, "pressure");
     
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");
+    if (hostParams.exportParticles)
+        dataExport.exportParticlesToVTK("particles" + Utilities::intToString(0) + ".vtu");
 
     timer.start();
 
@@ -661,6 +664,8 @@ int main(int argc, char *argv[]){
         if (step_number % hostParams.outputFrequency == 0) {
             ProfilingScope scope("Results output");
             dataExport.exportToVTK("solution" + Utilities::intToString(step_number) + ".vtu");
+            if(hostParams.exportParticles)
+                dataExport.exportParticlesToVTK("particles" + Utilities::intToString(step_number) + ".vtu");
         }
 
         float2 times = timer.stop();

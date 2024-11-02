@@ -14,8 +14,10 @@ struct SimulationParameters
     double tolerance;               //!< Linear solver tolerance
     int maxIterations;              //!< Maximum number of iterations of the linear solver
 
-    const char* meshFileName;             //!< File name of the input mesh file
+    const char* meshFileName;       //!< File name of the input mesh file
     int outputFrequency;            //!< Output data each N frames
+    
+    int exportParticles;            //!< Export particles to VTK (boolean flag)
 
     void setDefaultParameters(){
         rho = 1.0;
@@ -29,6 +31,7 @@ struct SimulationParameters
 
         meshFileName = "";
         outputFrequency = 1;
+        exportParticles = 0;
     }
 };
 

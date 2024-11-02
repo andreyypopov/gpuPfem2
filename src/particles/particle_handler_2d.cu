@@ -58,7 +58,7 @@ ParticleHandler2D::ParticleHandler2D(const Mesh2D *mesh_, int cellDivisionLevel)
         }
 
     copy_h2const(hostSubcellCenters.data(), subcellCenters, hostParticlesPerCell);
-    particleCount = particleNum * mesh->getCells().size;
+    particleCount = hostParticlesPerCell * mesh->getCells().size;
 
     allocate_device(&particleIndex, 1);
 }
