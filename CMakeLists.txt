@@ -36,6 +36,7 @@ SET(src_particle_files
 SET(header_files
 	${PROJECT_SOURCE_PATH}/data_export.cuh
 	${PROJECT_SOURCE_PATH}/Dirichlet_bcs.cuh
+	${PROJECT_SOURCE_PATH}/geometry.cuh
 	${PROJECT_SOURCE_PATH}/linear_solver.cuh
 	${PROJECT_SOURCE_PATH}/mesh_2d.cuh
 	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cuh

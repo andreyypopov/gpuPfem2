@@ -1,5 +1,6 @@
 #include "data_export.cuh"
 #include "Dirichlet_bcs.cuh"
+#include "geometry.cuh"
 #include "linear_solver.cuh"
 #include "mesh_2d.cuh"
 #include "numerical_integrator_2d.cuh"
@@ -135,7 +136,7 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, cons
 
             for (int qp = 0; qp < edgeQuadraturePointsNum; ++qp) {
                 const Point2 quadraturePoint = edgeQuadraturePoint(start, end, edgeQuadratureFormula[qp].coordinate);
-                const Point3 Lcoordinates = transformGlobalToLocal(quadraturePoint, cellInvJacobi, triangleVertices[2]);
+                const Point3 Lcoordinates = GEOMETRY::transformGlobalToLocal(quadraturePoint, cellInvJacobi, triangleVertices[2]);
 
                 aux = simParams.mu * simParams.dt * edgeQuadratureFormula[qp].weight;
 

@@ -13,6 +13,13 @@ public:
     ~ParticleHandler2D();
 
     void seedParticles();
+    void initParticleVelocity(const deviceVector<double*> &velocitySolution);
+
+    void advectParticles(const deviceVector<double*> &velocitySolution, double timeStep, int particleSubsteps);
+
+    void correctParticleVelocity(const deviceVector<double*> &velocitySolution, const deviceVector<double*> &velocitySolutionOld);
+
+    void projectVelocityOntoGrid(deviceVector<double*> &velocity);
 
     const Particle2D *getParticles() const {
         return particles.data;
@@ -23,10 +30,21 @@ public:
     }
 
 private:
+    void sortParticlesInCells();
+
     const Mesh2D *mesh;
     
     deviceVector<Particle2D> particles;
-    int *particleIndex;
+    int *deviceParticleCount;
+
+    deviceVector<int> particlesForCheckInNeighborCells;
+    deviceVector<int> particlesToBeDeleted;
+    int *particlesForCheckInNeighborCellsCount;
+    int *particlesToBeDeletedCount;
+
+    std::array<deviceVector<double>, 2> projectionVelocity;
+    deviceVector<double*> projectionVelocityPtrs;
+    deviceVector<double> projectionWeights;
 
     int particleCount;
 };

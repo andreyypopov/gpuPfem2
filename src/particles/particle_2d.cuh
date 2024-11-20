@@ -10,35 +10,33 @@ public:
 
     __host__ __device__ Particle2D(const Point2 &position, const Point3 &localPosition, unsigned int ID = 0);
 
+    __device__ bool isInsideCell(const Matrix2x2 &invJacobi, const Point2 &v3);
+
     unsigned int getID() const {
         return ID;
     }
 
-    Point2 getPosition() const {
+    __host__ __device__ Point2 getPosition() const {
         return position;
     }
 
-    void setPosition(const Point2 &newPosition){
+    __host__ __device__ void setPosition(const Point2 &newPosition){
         position = newPosition;
     }
 
-    Point3 getLocalPosition() const {
+    __host__ __device__ Point3 getLocalPosition() const {
         return localPosition;
     }
 
-    void setLocalPosition(const Point3 &newLocalPosition){
-        localPosition = newLocalPosition;
-    }
-
-    Point2 getVelocity() const {
+    __host__ __device__ Point2 getVelocity() const {
         return velocity;
     }
 
-    void setVelocity(const Point2 &newVelocity){
+    __host__ __device__ void setVelocity(const Point2 &newVelocity){
         velocity = newVelocity;
     }
 
-    unsigned int getCellID() const {
+    __host__ __device__ unsigned int getCellID() const {
         return cellID;
     }
 
@@ -47,6 +45,10 @@ public:
     }
 
 private:
+    __host__ __device__ void setLocalPosition(const Point3 &newLocalPosition) {
+        localPosition = newLocalPosition;
+    }
+
     unsigned int ID;
     Point2 position;
     Point3 localPosition;

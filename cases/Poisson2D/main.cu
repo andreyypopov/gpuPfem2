@@ -1,5 +1,6 @@
 #include "data_export.cuh"
 #include "Dirichlet_bcs.cuh"
+#include "geometry.cuh"
 #include "linear_solver.cuh"
 #include "mesh_2d.cuh"
 #include "numerical_integrator_2d.cuh"
@@ -45,7 +46,7 @@ __global__ void kIntegrateOverCell(int n, const Point2 *vertices, const uint3 *c
 
         for(int k = 0; k < faceQuadraturePointsNum; ++k){
             const Point3 Lcoordinates = faceQuadratureFormula[k].coordinates;
-            Point2 quadraturePoint = transformLocalToGlobal(Lcoordinates, triangleVertices);
+            Point2 quadraturePoint = GEOMETRY::transformLocalToGlobal(Lcoordinates, triangleVertices);
 
             for(int i = 0; i < 3; ++i){
                 for(int j = i; j < 3; ++j){
