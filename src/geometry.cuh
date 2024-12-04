@@ -28,6 +28,10 @@ namespace GEOMETRY
         
         return true;
     }
+
+    __host__ __device__ inline double distance(const Point2 &from, const Point2 &to){
+        return sqrt((from.x - to.x) * (from.x - to.x) + (from.y - to.y) * (from.y - to.y));
+    }
 }
 
 #endif // GEOMETRY_CUH
