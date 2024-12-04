@@ -331,6 +331,10 @@ public:
         return velocitySolution;
     }
 
+    auto& getVelocitySolution() {
+        return velocitySolution;
+    }
+
     const auto& getVelocitySolutionOld() const {
         return velocitySolutionOld;
     }
@@ -612,12 +616,16 @@ int main(int argc, char *argv[]){
 
     //time loop
     unsigned int step_number = 1;
-    for (double t = 0; t < hostParams.tFinal; t += hostParams.dt, ++step_number) {
+    for (double t = hostParams.dt; t < hostParams.tFinal; t += hostParams.dt, ++step_number) {
         printf("\nTime step no. %u, time = %f\n", step_number, t);
         ProfilingScope stepScope("Simulation step");
 
         pScope.start("Particle advection");
         particleHandler.advectParticles(integrator.getVelocitySolution(), hostParams.dt, hostParams.particleAdvectionSubsteps);
+        pScope.stop();
+
+        pScope.start("Particle velocity projection");
+        particleHandler.projectVelocityOntoGrid(integrator.getVelocitySolution());
         pScope.stop();
 
         for(int i = 0; i < 2; ++i)

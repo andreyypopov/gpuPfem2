@@ -8,7 +8,7 @@ struct CONSTANTS {
     static constexpr double TWO_PI = 6.28318530717958647692;                //!< Math constant \f$2\pi\f$
 
     static constexpr int MAX_SIMPLE_NEIGHBORS_PER_CELL = 12;
-    static constexpr double MEMORY_REALLOCATION_COEFFICIENT = 1.25;
+    static constexpr double MEMORY_REALLOCATION_COEFFICIENT = 1.1;
     static constexpr int MAX_GAUSS_POINTS = 13;
     static constexpr int MAX_CELL_DIVISION_LEVEL = 4;
     static constexpr int MAX_PARTICLES_PER_CELL = MAX_CELL_DIVISION_LEVEL * MAX_CELL_DIVISION_LEVEL;

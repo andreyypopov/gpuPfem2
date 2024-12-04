@@ -31,6 +31,7 @@ public:
 
 private:
     void sortParticlesInCells();
+    void checkParticleDistribution(const deviceVector<double*> &velocitySolution);
 
     const Mesh2D *mesh;
     
@@ -41,10 +42,13 @@ private:
     deviceVector<int> particlesToBeDeleted;
     int *particlesForCheckInNeighborCellsCount;
     int *particlesToBeDeletedCount;
+    int *particlesToBeAddedCount;
 
     std::array<deviceVector<double>, 2> projectionVelocity;
     deviceVector<double*> projectionVelocityPtrs;
     deviceVector<double> projectionWeights;
+
+    deviceVector<int> particleCountInSubcells;
 
     int particleCount;
 };
