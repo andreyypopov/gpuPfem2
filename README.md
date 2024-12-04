@@ -1,17 +1,22 @@
-# gpuFem
-CUDA implementation of the finite element method
+# gpuPfem2
+
+CUDA implementation of the particle finite element method, 2<sup>nd</sup> generation
 
 ## Algorithm
 
-Solution of the 2D problem using FEM. The whole pipeline is working on GPU:
+Solution of the 2D problem using PFEM-2. The whole pipeline, including both particle and mesh steps, is working on GPU:
 
 1. Import of the mesh in DAT format (list of vertices and triangles, can be prepared in SALOME)
 2. Setup of the Dirichlet boundary conditions
 3. Setup of the CSR matrix structure (analysis of the mesh connectivity)
-4. Assembling of the system matrix and right hand side vector by means of numerical integration using Gauss quadrature rules
-5. Application of the Dirichlet boundary conditions (changes to both rows and columns corresponding to these boundary degrees of freedom)
-6. Solution of the linear system using PCG or GMRES (with or without Jacobi preconditioner)
-7. Export of results to a VTK (XML-type) file
+4. Initial seeding of the particles
+5. Particle advection, including sorting against mesh cells and checking particle distribution
+6. Projection of velocity from particles onto grid
+7. Assembling of the system matrix and right hand side vector by means of numerical integration using Gauss quadrature rules
+8. Application of the Dirichlet boundary conditions (changes to both rows and columns corresponding to these boundary degrees of freedom)
+9. Solution of the linear system using PCG or GMRES (with or without Jacobi preconditioner)
+10. Correction of particle velocity
+11. Export of results to a VTK (XML-type) file
 
 ## Prerequisites
 
@@ -24,3 +29,4 @@ Solution of the 2D problem using FEM. The whole pipeline is working on GPU:
 
 1. Poisson equation in a rectangular domain
 2. Creeping flow (without convective term) in a channel (Poiseuille flow) with partitioned approached (3 equations: velocity prediction equation, Poisson equation for pressure, velocity correction equation).
+3. Poiseuille flow in a channel

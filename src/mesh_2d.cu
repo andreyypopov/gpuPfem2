@@ -4,6 +4,7 @@
 
 #include <array>
 #include <fstream>
+#include <set>
 #include <vector>
 
 __global__ void kCalculateCellArea(int n, const Point2 *vertices, const uint3 *cells, double *areas){
@@ -32,7 +33,7 @@ __global__ void kCalculateInvJacobi(int n, const Point2 *vertices, const uint3 *
     }
 }
 
-bool Mesh2D::loadMeshFromFile(const std::string &filename, double scale)
+bool Mesh2D::loadMeshFromFile(const std::string &filename, bool fillNeighborLists, double scale)
 {
     std::ifstream meshFile(filename);
 
@@ -80,6 +81,9 @@ bool Mesh2D::loadMeshFromFile(const std::string &filename, double scale)
         copy_h2d(hostCells.data(), cells.data, cells.size);
         set_value_device(edgeBoundaryIDs.data, -1, cells.size);
 
+        if(fillNeighborLists)
+            fillCellNeighborIndices(hostCells);
+
         initMesh();
 
         printf("Loaded mesh with %d vertices and %d cells\n", numVertices, numCells);
@@ -98,4 +102,38 @@ void Mesh2D::initMesh()
     unsigned int blocks = blocksForSize(cells.size);
     kCalculateCellArea<<<blocks, gpuThreads>>>(cells.size, vertices.data, cells.data, cellArea.data);
     kCalculateInvJacobi<<<blocks, gpuThreads>>>(cells.size, vertices.data, cells.data, invJacobi.data);
+}
+
+void Mesh2D::fillCellNeighborIndices(const std::vector<uint3> &hostCells)
+{
+    const int numCells = hostCells.size();
+    std::vector<std::set<int>> hostCellNeighbors(numCells);
+
+    for(int i = 0; i < numCells; ++i)
+        for(int j = i + 1; j < numCells; ++j){
+            const uint3 triangleI = hostCells[i];
+            const uint3 triangleJ = hostCells[j];
+
+            if(triangleI.x == triangleJ.x || triangleI.x == triangleJ.y || triangleI.x == triangleJ.z ||
+                triangleI.y == triangleJ.x || triangleI.y == triangleJ.y || triangleI.y == triangleJ.z ||
+                triangleI.z == triangleJ.x || triangleI.z == triangleJ.y || triangleI.z == triangleJ.z){
+                    hostCellNeighbors[i].insert(j);
+                    hostCellNeighbors[j].insert(i);
+                }
+        }
+
+    std::vector<int> hostCellNeighborOffsets(numCells + 1);
+    hostCellNeighborOffsets[0] = 0;
+    for(int i = 0; i < numCells; ++i)
+        hostCellNeighborOffsets[i + 1] = hostCellNeighborOffsets[i] + hostCellNeighbors[i].size();
+
+    std::vector<int> hostCellNeighborIndices(hostCellNeighborOffsets.back());
+    for(int i = 0; i < numCells; ++i)
+        std::copy(hostCellNeighbors[i].begin(), hostCellNeighbors[i].end(), hostCellNeighborIndices.begin() + hostCellNeighborOffsets[i]);
+
+    cellNeighborsOffsets.allocate(numCells + 1);
+    cellNeighborIndices.allocate(hostCellNeighborOffsets.back());
+
+    copy_h2d(hostCellNeighborOffsets.data(), cellNeighborsOffsets.data, numCells + 1);
+    copy_h2d(hostCellNeighborIndices.data(), cellNeighborIndices.data, hostCellNeighborOffsets.back());
 }

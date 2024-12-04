@@ -87,19 +87,24 @@ public:
      * @param new_size New size in number of elements
      * 
      * If the new size does not exceed the vector capacity, only the size is updated.
-     * Otherwise memory reallocation is performed: free the memory (completely, without copying the data),
-     * allocate new memory (new size + a certain additional amount), set the size to the requested size.
+     * Otherwise memory reallocation is performed:
+     * allocate new memory (new size + a certain additional amount),
+     * copy old data (using the its size)
+     * free the old memory,
+     * the size is set to the requested size.
      */
     void resize(int new_size){
         if(new_size <= capacity)
             size = new_size;
         else {
-            free();
+            T* oldData = this->data;
+            const int oldSize = size;
 
             allocate(CONSTANTS::MEMORY_REALLOCATION_COEFFICIENT * new_size);
-            size = new_size;
+            
+            copy_d2d(oldData, data, oldSize);
 
-            printf("Reallocation performed\n");
+            free_device(oldData);
         }
     }
 

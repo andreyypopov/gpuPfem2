@@ -11,10 +11,7 @@
 
 #include "common/cuda_math.cuh"
 #include "common/gpu_timer.cuh"
-#include "common/profiling.h"
 #include "common/utilities.h"
-
-#include "particles/particle_handler_2d.cuh"
 
 #include <vector>
 
@@ -75,7 +72,7 @@ __global__ void kSetEdgeBoundaryIDs(int n, const Point2 *vertices, const uint3 *
 }
 
 __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, const uint3 *cells, double *areas, Matrix2x2 *invJacobi,
-    const int3 *edgeBoundaryIDs, double **velocity, double** velocityOld,
+    const int3 *edgeBoundaryIDs, const double **velocity, const double** velocityOld,
     const int **rowOffset, const int **colIndices, double **matrixValues, double **rhsVector)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -165,7 +162,7 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, cons
 }
 
 __global__ void kIntegratePressureEquation(int n, const Point2* vertices, const uint3* cells, double* areas, Matrix2x2* invJacobi,
-    double** velocityPrediction, const int* rowOffset, const int* colIndices, double* matrixValues, double* rhsVector)
+    const double** velocityPrediction, const int* rowOffset, const int* colIndices, double* matrixValues, double* rhsVector)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -206,7 +203,7 @@ __global__ void kIntegratePressureEquation(int n, const Point2* vertices, const 
 }
 
 __global__ void kIntegrateVelocityCorrection(int n, const Point2* vertices, const uint3* cells, double* areas, Matrix2x2* invJacobi,
-    double** velocityPrediction, double* pressure, const int** rowOffset, const int** colIndices, double** matrixValues, double** rhsVector)
+    const double** velocityPrediction, const double* pressure, const int** rowOffset, const int** colIndices, double** matrixValues, double** rhsVector)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -250,7 +247,7 @@ __global__ void kIntegrateVelocityCorrection(int n, const Point2* vertices, cons
 }
 
 __global__ void kAccumulatePressureGradient(int n, const uint3* cells, double* areas, Matrix2x2* invJacobi,
-    double* pressure, const int* DirichletNodesMap, double *numerator, double *denominator, int component)
+    const double* pressure, const int* DirichletNodesMap, double *numerator, double *denominator, int component)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -327,18 +324,6 @@ public:
     PoiseuilleFlowIntegrator(const Mesh2D& mesh_)
         : NumericalIntegrator2D(mesh_) { };
     
-    const auto &getVelocitySolution() const {
-        return velocitySolution;
-    }
-
-    auto& getVelocitySolution() {
-        return velocitySolution;
-    }
-
-    const auto& getVelocitySolutionOld() const {
-        return velocitySolutionOld;
-    }
-
     //setup pointers (including device ones)
     void setupVelocityPrediction(std::array<SparseMatrixCSR, 2>& csrMatrix, std::array<deviceVector<double>, 2>& rhsVector,
         const std::array<deviceVector<double>, 2>& velocity);
@@ -356,10 +341,10 @@ public:
     void assembleVelocityCorrection();
 
 private:
-    deviceVector<double*> velocitySolution;
-    deviceVector<double*> velocitySolutionOld;
-    deviceVector<double*> velocityPrediction;
-    double* pressure;
+    deviceVector<const double*> velocitySolution;
+    deviceVector<const double*> velocitySolutionOld;
+    deviceVector<const double*> velocityPrediction;
+    const double* pressure;
 
     deviceVector<double*> velocityPredictionRhs;
     deviceVector<double*> velocityCorrectionRhs;
@@ -380,7 +365,7 @@ private:
 
 void PoiseuilleFlowIntegrator::setupVelocityPrediction(std::array<SparseMatrixCSR, 2>& csrMatrix, std::array<deviceVector<double>, 2>& rhsVector, const std::array<deviceVector<double>, 2>& velocity)
 {
-    double* vel[2];
+    const double* vel[2];
     const int* rowOffset[2];
     const int* colIndices[2];
     double* matrixValues[2];
@@ -419,8 +404,8 @@ void PoiseuilleFlowIntegrator::setupPressure(SparseMatrixCSR& csrMatrix, deviceV
 void PoiseuilleFlowIntegrator::setupVelocityCorrection(std::array<SparseMatrixCSR, 2>& csrMatrix, std::array<deviceVector<double>, 2>& rhsVector,
     const std::array<deviceVector<double>, 2>& velocity, const std::array<deviceVector<double>, 2>& velocityOld)
 {
-    double* vel[2];
-    double* velOld[2];
+    const double* vel[2];
+    const double* velOld[2];
     const int* rowOffset[2];
     const int* colIndices[2];
     double* matrixValues[2];
@@ -475,9 +460,8 @@ void PoiseuilleFlowIntegrator::assembleVelocityCorrection()
 
 int main(int argc, char *argv[]){
 	GpuTimer timer;
-    ProfilingScope pScope;
     
-    pScope.start("Mesh import");
+    timer.start();
 
     Mesh2D mesh;
     if(!mesh.loadMeshFromFile("../ChannelMesh.dat"))
@@ -486,14 +470,7 @@ int main(int argc, char *argv[]){
     unsigned int blocks = blocksForSize(mesh.getCells().size);
     kSetEdgeBoundaryIDs<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, mesh.getEdgeBoundaryIDs().data);
 
-    pScope.stop();
-
-    pScope.start("Particle seeding");
-
-    ParticleHandler2D particleHandler(&mesh, 2);
-    particleHandler.seedParticles();
-
-    pScope.stop();
+    timer.stop("Mesh import");
 
     const int problemSize = mesh.getVertices().size;
 
@@ -501,9 +478,9 @@ int main(int argc, char *argv[]){
     std::array<VelocityDirichletBCs, 2> velocityPredictionBCs;
     DirichletBCs pressureBCs;
     
-    {
-        ProfilingScope scope("Boundary conditions setup");
+    timer.start();
 
+    {
         std::array<std::vector<DirichletNode>, 2> hostVelocityBCs;
         std::vector<DirichletNode> hostPressureBCs;
 
@@ -538,6 +515,8 @@ int main(int argc, char *argv[]){
         pressureBCs.setupDirichletBCs(hostPressureBCs);
     }
 
+    timer.stop("Boundary conditions setup");
+
     const auto faceQuadratureGaussPoints = createFaceQuadratureFormula(1);
     const auto edgeQuadratureGaussPoints = createEdgeQuadratureFormula(1);
     const int faceGaussPointsNum = faceQuadratureGaussPoints.size();
@@ -552,7 +531,6 @@ int main(int argc, char *argv[]){
     hostParams.dt = 0.01;
     hostParams.tFinal = 5.0;
     hostParams.outputFrequency = 10;
-    hostParams.exportParticles = 1;
     copy_h2const(&hostParams, &simParams, 1);
 
     //matrices, solution and right-hand-side vectors for both component of velocity field (prediction and final ones) and pressure
@@ -593,15 +571,13 @@ int main(int argc, char *argv[]){
     integrator.setupPressure(pressureMatrix, pressureRhs, pressureSolution);
     integrator.setupVelocityCorrection(velocityCorrectionMatrix, velocityCorrectionRhs, velocitySolution, velocitySolutionOld);
 
-    particleHandler.initParticleVelocity(integrator.getVelocitySolution());
-
     SolverCG cgSolver(hostParams.tolerance, hostParams.maxIterations);
     cgSolver.init(pressureMatrix, true);
 
     SolverGMRES gmresSolver(hostParams.tolerance, hostParams.maxIterations);
     gmresSolver.init(velocityCorrectionMatrix[0], true);
 
-    DataExport dataExport(mesh, &particleHandler);
+    DataExport dataExport(mesh);
     dataExport.addScalarDataVector(velocitySolution[0], "velX");
     dataExport.addScalarDataVector(velocitySolution[1], "velY");
     dataExport.addScalarDataVector(velocityPrediction[0], "velPredictionX");
@@ -609,94 +585,55 @@ int main(int argc, char *argv[]){
     dataExport.addScalarDataVector(pressureSolution, "pressure");
     
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");
-    if (hostParams.exportParticles)
-        dataExport.exportParticlesToVTK("particles" + Utilities::intToString(0) + ".vtu");
-
-    timer.start();
 
     //time loop
     unsigned int step_number = 1;
-    for (double t = hostParams.dt; t < hostParams.tFinal; t += hostParams.dt, ++step_number) {
+    for (double t = 0; t < hostParams.tFinal; t += hostParams.dt, ++step_number) {
         printf("\nTime step no. %u, time = %f\n", step_number, t);
-        ProfilingScope stepScope("Simulation step");
-
-        pScope.start("Particle advection");
-        particleHandler.advectParticles(integrator.getVelocitySolution(), hostParams.dt, hostParams.particleAdvectionSubsteps);
-        pScope.stop();
-
-        pScope.start("Particle velocity projection");
-        particleHandler.projectVelocityOntoGrid(integrator.getVelocitySolution());
-        pScope.stop();
 
         for(int i = 0; i < 2; ++i)
             copy_d2d(velocitySolution[i].data, velocitySolutionOld[i].data, problemSize);
 
         for (int nOuterIter = 0; nOuterIter < 1; ++nOuterIter) {
             //assemble and solve velocity prediction equations
-            pScope.start("Velocity prediction");
-
-            pScope.start("Matrix assembly");
+            timer.start();
             for (int i = 0; i < 2; ++i) {
                 velocityPredictionMatrix[i].clearValues();
                 velocityPredictionRhs[i].clearValues();
             }
             integrator.assembleVelocityPrediction();
-            pScope.stop();
-            pScope.start("Linear solver");
             for (int i = 0; i < 2; ++i) {
                 velocityPredictionBCs[i].setDirichletValues(velocityBCs[i], pressureSolution, i);
                 velocityPredictionBCs[i].applyBCs(velocityPredictionMatrix[i], velocityPredictionRhs[i]);
                 gmresSolver.solve(velocityPredictionMatrix[i], velocityPrediction[i], velocityPredictionRhs[i]);
             }
-            pScope.stop();
-            pScope.stop();
+            timer.stop("Velocity prediction");
 
             //assemble and solve the pressure Poisson equation
-            pScope.start("Pressure equation");
-
-            pScope.start("Matrix assembly");
+            timer.start();
             pressureMatrix.clearValues();
             pressureRhs.clearValues();
             integrator.assemblePressureEquation();
             pressureBCs.applyBCs(pressureMatrix, pressureRhs);
-            pScope.stop();
-            pScope.start("Linear solver");
             cgSolver.solve(pressureMatrix, pressureSolution, pressureRhs);
-            pScope.stop();
-            pScope.stop();
+            timer.stop("Pressure equation");
 
             //assemble and solve velocity correction equations
-            pScope.start("Velocity correction");
-
-            pScope.start("Matrix assembly");
+            timer.start();
             for (int i = 0; i < 2; ++i) {
                 velocityCorrectionMatrix[i].clearValues();
                 velocityCorrectionRhs[i].clearValues();
             }
             integrator.assembleVelocityCorrection();
-            pScope.stop();
-            pScope.start("Linear solver");
             for (int i = 0; i < 2; ++i) {
                 velocityBCs[i].applyBCs(velocityCorrectionMatrix[i], velocityCorrectionRhs[i]);
                 cgSolver.solve(velocityCorrectionMatrix[i], velocitySolution[i], velocityCorrectionRhs[i]);
             }
-            pScope.stop();
-            pScope.stop();
+            timer.stop("Velocity correction");
         }
 
-        pScope.start("Particle velocity correction");
-        particleHandler.correctParticleVelocity(integrator.getVelocitySolution(), integrator.getVelocitySolutionOld());
-        pScope.stop();
-
-        if (step_number % hostParams.outputFrequency == 0) {
-            ProfilingScope scope("Results output");
+        if(step_number % hostParams.outputFrequency == 0)
             dataExport.exportToVTK("solution" + Utilities::intToString(step_number) + ".vtu");
-            if(hostParams.exportParticles)
-                dataExport.exportParticlesToVTK("particles" + Utilities::intToString(step_number) + ".vtu");
-        }
-
-        float2 times = timer.stop();
-        printf("Time of a simulation step: %6.3f ms, total time since start: %6.3f s\n", times.x, 0.001f * times.y);
     }
 
     return EXIT_SUCCESS;

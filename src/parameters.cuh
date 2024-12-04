@@ -14,8 +14,11 @@ struct SimulationParameters
     double tolerance;               //!< Linear solver tolerance
     int maxIterations;              //!< Maximum number of iterations of the linear solver
 
-    const char* meshFileName;             //!< File name of the input mesh file
+    const char* meshFileName;       //!< File name of the input mesh file
     int outputFrequency;            //!< Output data each N frames
+    
+    int particleAdvectionSubsteps;//!< Number of substeps for particle advection within 1 simulation step
+    int exportParticles;            //!< Export particles to VTK (boolean flag)
 
     void setDefaultParameters(){
         rho = 1.0;
@@ -23,12 +26,14 @@ struct SimulationParameters
 
         tFinal = 10.0;
         dt = 0.01;
+        particleAdvectionSubsteps = 3;
 
         tolerance = 1e-8;
         maxIterations = 1000;
 
         meshFileName = "";
         outputFrequency = 1;
+        exportParticles = 0;
     }
 };
 

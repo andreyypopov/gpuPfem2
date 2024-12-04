@@ -11,7 +11,7 @@
 class Mesh2D
 {
 public:
-    bool loadMeshFromFile(const std::string &filename, double scale = 1.0);
+    bool loadMeshFromFile(const std::string &filename, bool fillNeighborLists = true, double scale = 1.0);
 
     void initMesh();
 
@@ -35,6 +35,14 @@ public:
         return invJacobi;
     }
 
+    const auto &getCellNeighborsOffsets() const {
+        return cellNeighborsOffsets;
+    }
+
+    const auto &getCellNeighborIndices() const {
+        return cellNeighborIndices;
+    }
+
     const auto &getHostVertices() const {
         return hostVertices;
     }
@@ -44,9 +52,14 @@ public:
     }
 
 private:
+    void fillCellNeighborIndices(const std::vector<uint3> &hostCells);
+
     deviceVector<Point2> vertices;               //!< Vector of vertices coordinates
     deviceVector<uint3> cells;                   //!< Vector of indices of vertices describing each cell
     deviceVector<int3> edgeBoundaryIDs;          //!< Vector of boundary IDs for edges of each triangle
+
+    deviceVector<int> cellNeighborsOffsets;
+    deviceVector<int> cellNeighborIndices;
 
     deviceVector<double> cellArea;
     deviceVector<Matrix2x2> invJacobi;

@@ -81,6 +81,14 @@ __host__ __device__ inline double norm1(const Point2 &v){
     return fabs(v.x) + fabs(v.y);
 }
 
+__host__ __device__ inline Point3 operator+(const Point3 &v1, const Point3 &v2){
+    return Point3({ v1.x + v2.x, v1.y + v2.y, v1.z + v2.z });
+}
+
+__host__ __device__ inline Point3 operator*(double a, const Point3 &v){
+    return Point3({ v.x * a, v.y * a, v.z * a });
+}
+
 __host__ __device__ inline Point2 GivensRotation(const double &v1, const double &v2){
     const double coeff = rsqrt(v1 * v1 + v2 * v2);
 
