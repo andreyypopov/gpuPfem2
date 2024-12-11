@@ -264,10 +264,23 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
     if(usePreconditioning)
         extractDiagonal<<<gpuBlocks, gpuThreads>>>(n, invDiagValues.data, A.getRowOffset(), A.getColIndices(), A.getMatrixValues());
 
-    //x0 = 0
-    x.clearValues();
-    //r0 = b - A*x0 = b;
-    copy_d2d(b.data, rk.data, n);
+    //save main pointer for the vector used in SpMV
+    void* vecPointer = nullptr;
+    checkCusparseErrors(cusparseDnVecGetValues(vecX, &vecPointer));
+
+    //temporarily set the vector in SpMV to x0
+    checkCusparseErrors(cusparseDnVecSetValues(vecX, x.data));
+
+    //calculate A*x0
+    checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
+                CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+
+    //r0 = b - A*x0
+    subtractVectors<<<gpuBlocks, gpuThreads>>>(n, rk.data, b.data, wk.data);
+
+    //set pointer of the vector in SpMV back to normal
+    checkCusparseErrors(cusparseDnVecSetValues(vecX, vecPointer));
 
     //u_i = M^(-1)*r_i
     if(usePreconditioning)
@@ -337,10 +350,23 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
 
     LinearSolver::solve(A, x, b);
 
-    //x0 = 0
-    x.clearValues();
-    //r0 = b - A*x0 = b;
-    copy_d2d(b.data, rk.data, n);
+    //save main pointer for the vector used in SpMV
+    void* vecPointer = nullptr;
+    checkCusparseErrors(cusparseDnVecGetValues(vecX, &vecPointer));
+
+    //temporarily set the vector in SpMV to x0
+    checkCusparseErrors(cusparseDnVecSetValues(vecX, x.data));
+
+    //calculate A*x0
+    checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
+                CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+
+    //r0 = b - A*x0
+    subtractVectors<<<gpuBlocks, gpuThreads>>>(n, rk.data, b.data, Apk.data);
+
+    //set pointer of the vector in SpMV back to normal
+    checkCusparseErrors(cusparseDnVecSetValues(vecX, vecPointer));
 
     //z_0 = M^(-1)*r_0
     if(usePreconditioning)
@@ -453,11 +479,19 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
 
     LinearSolver::solve(A, x, b);
     
-    //x0 = 0
-    x.clearValues();
+    //temporarily set the vector in SpMV to x0
+    checkCusparseErrors(cusparseDnVecSetValues(vecX, x.data));
 
     v_kp = Vmatrix.data;
-    copy_d2d(b.data, v_kp, n);
+    checkCusparseErrors(cusparseDnVecSetValues(vecY, v_kp));
+
+    //calculate A*x0
+    checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
+                CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+
+    //r0 = b - A*x0
+    subtractVectors<<<gpuBlocks, gpuThreads>>>(n, v_kp, b.data, v_kp);
 
     //r0 := M^(-1) * r0
     if(usePreconditioning)
