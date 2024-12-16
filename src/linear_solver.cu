@@ -110,31 +110,10 @@ __global__ void initCoefficients(double *alpha, double *beta, const double *gamm
     *beta = 0;
 }
 
-__global__ void extractDiagonal(int n, double *invDiagonal, const int *rowPtr, const int *colIndex, const double *matrixVal)
-{
-    unsigned int row = blockDim.x * blockIdx.x + threadIdx.x;
-    if (row >= n)
-        return;
-
-    const int startElem = rowPtr[row];
-    const int endElem = rowPtr[row + 1];
-    int diagIndex = indexBinarySearch(row, colIndex + startElem, endElem - startElem);
-    if(diagIndex >= 0)
-        invDiagonal[row] = 1.0 / matrixVal[startElem + diagIndex];
-}
-
-__global__ void applyJacobiPreconditioner(int n, double *dest, const double *src, const double *preconditioner)
-{
-    unsigned int row = blockDim.x * blockIdx.x + threadIdx.x;
-    if (row >= n)
-        return;
-
-    dest[row] = src[row] * preconditioner[row];
-}
-
-LinearSolver::LinearSolver(double tolerance, int max_iterations)
+LinearSolver::LinearSolver(double tolerance, int max_iterations, Preconditioner *precond_)
     : aSpmv(1.0)
     , bSpmv(0.0)
+    , precond(precond_)
     , tolerance(tolerance)
     , tolerance_squared(tolerance * tolerance)
     , maxIterations(max_iterations)
@@ -156,15 +135,11 @@ LinearSolver::~LinearSolver()
     checkCudaErrors(cudaFree(dBuffer));
 }
 
-void LinearSolver::init(const SparseMatrixCSR& matrix, bool usePreconditioning) {
+void LinearSolver::init(const SparseMatrixCSR& matrix) {
     this->n = matrix.getRows();
     this->nnz = matrix.getTotalElements();
-    this->usePreconditioning = usePreconditioning;
 
     gpuBlocks = blocksForSize(n);
-
-    if(usePreconditioning)
-        invDiagValues.allocate(n);
     
     checkCusparseErrors(cusparseCreateCsr(&matA, n, n, nnz,
         matrix.getRowOffset(), matrix.getColIndices(), matrix.getMatrixValues(),
@@ -181,13 +156,13 @@ bool LinearSolver::solve(const SparseMatrixCSR &A, deviceVector<double> &x, cons
         checkCusparseErrors(cusparseCsrSetPointers(matA, A.getRowOffset(), A.getColIndices(), A.getMatrixValues()));
     }
 
-    if(usePreconditioning)
-        extractDiagonal<<<gpuBlocks, gpuThreads>>>(n, invDiagValues.data, A.getRowOffset(), A.getColIndices(), A.getMatrixValues());
+    if(precond)
+        precond->initialize(A);
 
     return true;
 }
 
-SolverCG::SolverCG(double tolerance, int max_iterations)
+SolverCG::SolverCG(double tolerance, int max_iterations, Preconditioner *precond_)
     : LinearSolver(tolerance, max_iterations)
 {
 }
@@ -204,11 +179,11 @@ SolverCG::~SolverCG(){
     free_device(gamma_k);
 }
 
-void SolverCG::init(const SparseMatrixCSR &matrix, bool usePreconditioning){
-    LinearSolver::init(matrix, usePreconditioning);
+void SolverCG::init(const SparseMatrixCSR &matrix){
+    LinearSolver::init(matrix);
 
     rk.allocate(n);
-    if(usePreconditioning){
+    if(precond){
         if(ChronopolousGear)
             uk.allocate(n);
         else
@@ -234,7 +209,7 @@ void SolverCG::init(const SparseMatrixCSR &matrix, bool usePreconditioning){
     allocate_device(&gamma_k, 1);
 
     if (ChronopolousGear) {
-        double *v = usePreconditioning ? uk.data : rk.data;
+        double *v = precond ? uk.data : rk.data;
         checkCusparseErrors(cusparseCreateDnVec(&vecX, n, v, CUDA_R_64F));
         checkCusparseErrors(cusparseCreateDnVec(&vecY, n, wk.data, CUDA_R_64F));
     }
@@ -261,8 +236,8 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
 {
     bool converged = false;
 
-    if(usePreconditioning)
-        extractDiagonal<<<gpuBlocks, gpuThreads>>>(n, invDiagValues.data, A.getRowOffset(), A.getColIndices(), A.getMatrixValues());
+    if(precond)
+        precond->initialize(A);
 
     //save main pointer for the vector used in SpMV
     void* vecPointer = nullptr;
@@ -283,15 +258,15 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
     checkCusparseErrors(cusparseDnVecSetValues(vecX, vecPointer));
 
     //u_i = M^(-1)*r_i
-    if(usePreconditioning)
-        applyJacobiPreconditioner<<<gpuBlocks, gpuThreads>>>(n, uk.data, rk.data, invDiagValues.data);
+    if(precond)
+        precond->applyPreconditioner(uk.data, rk.data);
 
     //w0 = A*u0
     checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
             &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
             CUSPARSE_SPMV_CSR_ALG1, dBuffer));
     
-    double *v = usePreconditioning ? uk.data : rk.data;
+    double *v = precond ? uk.data : rk.data;
     //gamma0 = (r0, u0)
     checkCublasErrors(cublasDdot(cublasHandle, n, rk.data, 1, v, 1, gamma_kp));
 
@@ -313,8 +288,8 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
         updateVectors<<<gpuBlocks, gpuThreads>>>(n, pk.data, sk.data, x.data, rk.data, v, wk.data, alpha_k, beta_k);
 
         //u_i = M^(-1)*r_i
-        if(usePreconditioning)
-            applyJacobiPreconditioner<<<gpuBlocks, gpuThreads>>>(n, uk.data, rk.data, invDiagValues.data);
+        if(precond)
+            precond->applyPreconditioner(uk.data, rk.data);
 
         //w_i = A*u_i
         checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -369,10 +344,10 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
     checkCusparseErrors(cusparseDnVecSetValues(vecX, vecPointer));
 
     //z_0 = M^(-1)*r_0
-    if(usePreconditioning)
-        applyJacobiPreconditioner<<<gpuBlocks, gpuThreads>>>(n, zk.data, rk.data, invDiagValues.data);
+    if(precond)
+        precond->applyPreconditioner(zk.data, rk.data);
 
-    double *v = usePreconditioning ? zk.data : rk.data;
+    double *v = precond ? zk.data : rk.data;
     copy_d2d(v, pk.data, n);
 
     //(r_0, z_0)
@@ -399,8 +374,8 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
         updateXR<<<gpuBlocks, gpuThreads>>>(n, x.data, rk.data, pk.data, Apk.data, gamma_kp, pkApk);
 
         //z_i = M^(-1)*r_i
-        if(usePreconditioning)
-            applyJacobiPreconditioner<<<gpuBlocks, gpuThreads>>>(n, zk.data, rk.data, invDiagValues.data);
+        if(precond)
+            precond->applyPreconditioner(zk.data, rk.data);
 
         std::swap(gamma_kp, gamma_k);
         //gamma_i = (r_i, z_i)
@@ -423,8 +398,8 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
     return converged;
 }
 
-SolverGMRES::SolverGMRES(double tolerance, int max_iterations)
-    : LinearSolver(tolerance, max_iterations)
+SolverGMRES::SolverGMRES(double tolerance, int max_iterations, Preconditioner *precond_)
+    : LinearSolver(tolerance, max_iterations, precond_)
 {
     allocate_device(&aux, 1);
     allocate_device(&d_abSpmv, 1);
@@ -439,9 +414,9 @@ SolverGMRES::~SolverGMRES()
     free_device(d_abSpmv);
 }
 
-void SolverGMRES::init(const SparseMatrixCSR &matrix, bool usePreconditioning)
+void SolverGMRES::init(const SparseMatrixCSR &matrix)
 {
-    LinearSolver::init(matrix, usePreconditioning);
+    LinearSolver::init(matrix);
 
     if (maxIterations > matrix.getRows()) {
         printf("Warning: maximum number of iterations %d is greater than the number of rows in the matrix. Setting it to %d\n", maxIterations, matrix.getRows());
@@ -494,8 +469,8 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
     subtractVectors<<<gpuBlocks, gpuThreads>>>(n, v_kp, b.data, v_kp);
 
     //r0 := M^(-1) * r0
-    if(usePreconditioning)
-        applyJacobiPreconditioner<<<gpuBlocks, gpuThreads>>>(n, v_kp, v_kp, invDiagValues.data);
+    if(precond)
+        precond->applyPreconditioner(v_kp, v_kp);
 
     //compute ||r0||, which becomes first element of the beta vector
     checkCublasErrors(cublasDnrm2(cublasHandle, n, v_kp, 1, beta.data));
@@ -526,8 +501,8 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
                 &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
                 CUSPARSE_SPMV_CSR_ALG1, dBuffer));
 
-        if(usePreconditioning)
-            applyJacobiPreconditioner<<<gpuBlocks, gpuThreads>>>(n, v_kp, v_kp, invDiagValues.data);
+        if(precond)
+            precond->applyPreconditioner(v_kp, v_kp);
 
         //pointer to the first element in the column to be filled at this iteration
         double *h_1k = Hmatrix.data + maxIterations * (it - 1);

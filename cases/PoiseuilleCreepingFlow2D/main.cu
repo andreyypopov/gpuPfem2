@@ -4,6 +4,7 @@
 #include "linear_solver.cuh"
 #include "mesh_2d.cuh"
 #include "numerical_integrator_2d.cuh"
+#include "preconditioners.cuh"
 #include "sparse_matrix.cuh"
 #include "quadrature_formula_1d.cuh"
 #include "quadrature_formula_2d.cuh"
@@ -571,11 +572,12 @@ int main(int argc, char *argv[]){
     integrator.setupPressure(pressureMatrix, pressureRhs, pressureSolution);
     integrator.setupVelocityCorrection(velocityCorrectionMatrix, velocityCorrectionRhs, velocitySolution, velocitySolutionOld);
 
-    SolverCG cgSolver(hostParams.tolerance, hostParams.maxIterations);
-    cgSolver.init(pressureMatrix, true);
+	PreconditionerJacobi precond(problemSize);
+    SolverCG cgSolver(hostParams.tolerance, hostParams.maxIterations, &precond);
+    cgSolver.init(pressureMatrix);
 
-    SolverGMRES gmresSolver(hostParams.tolerance, hostParams.maxIterations);
-    gmresSolver.init(velocityCorrectionMatrix[0], true);
+    SolverGMRES gmresSolver(hostParams.tolerance, hostParams.maxIterations, &precond);
+    gmresSolver.init(velocityCorrectionMatrix[0]);
 
     DataExport dataExport(mesh);
     dataExport.addScalarDataVector(velocitySolution[0], "velX");
