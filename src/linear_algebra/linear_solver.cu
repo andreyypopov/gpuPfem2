@@ -1,8 +1,8 @@
 #include "linear_solver.cuh"
 
-#include "common/cuda_helper.cuh"
-#include "common/cuda_math.cuh"
-#include "common/cuda_memory.cuh"
+#include "../common/cuda_helper.cuh"
+#include "../common/cuda_math.cuh"
+#include "../common/cuda_memory.cuh"
 
 __global__ void subtractVectors(int n, double* res, double* v1, double* v2)
 {
@@ -110,28 +110,22 @@ __global__ void initCoefficients(double *alpha, double *beta, const double *gamm
     *beta = 0;
 }
 
-LinearSolver::LinearSolver(double tolerance, int max_iterations, Preconditioner *precond_)
-    : aSpmv(1.0)
+LinearSolver::LinearSolver(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_)
+    : LA(LA_)
+    , aSpmv(1.0)
     , bSpmv(0.0)
     , precond(precond_)
     , tolerance(tolerance)
     , tolerance_squared(tolerance * tolerance)
     , maxIterations(max_iterations)
 {
-    checkCublasErrors(cublasCreate(&cublasHandle));
-    //needed for correct execution of functions which return scalar result (dot, nrm2)
-    checkCublasErrors(cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_DEVICE));
-
-    checkCusparseErrors(cusparseCreate(&cusparseHandle));
 }
 
 LinearSolver::~LinearSolver()
 {
-    checkCublasErrors(cublasDestroy(cublasHandle));
     checkCusparseErrors(cusparseDestroySpMat(matA));
     checkCusparseErrors(cusparseDestroyDnVec(vecX));
     checkCusparseErrors(cusparseDestroyDnVec(vecY));
-    checkCusparseErrors(cusparseDestroy(cusparseHandle));
     checkCudaErrors(cudaFree(dBuffer));
 }
 
@@ -156,14 +150,11 @@ bool LinearSolver::solve(const SparseMatrixCSR &A, deviceVector<double> &x, cons
         checkCusparseErrors(cusparseCsrSetPointers(matA, A.getRowOffset(), A.getColIndices(), A.getMatrixValues()));
     }
 
-    if(precond)
-        precond->initialize(A);
-
     return true;
 }
 
-SolverCG::SolverCG(double tolerance, int max_iterations, Preconditioner *precond_)
-    : LinearSolver(tolerance, max_iterations)
+SolverCG::SolverCG(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_)
+    : LinearSolver(tolerance, max_iterations, LA_, precond_)
 {
 }
 
@@ -218,18 +209,9 @@ void SolverCG::init(const SparseMatrixCSR &matrix){
         checkCusparseErrors(cusparseCreateDnVec(&vecY, n, Apk.data, CUDA_R_64F));
     }
 
-    size_t bufferSize = 0;
-
-    checkCusparseErrors(cusparseSpMV_bufferSize(
-        cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-        &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
-        CUSPARSE_SPMV_CSR_ALG1, &bufferSize));
+    const size_t bufferSize = LA->sparseMV_bufferSize(matA, vecX, vecY, &aSpmv, &bSpmv);
     checkCudaErrors(cudaMalloc(&dBuffer, bufferSize));
-
-    checkCusparseErrors(cusparseSpMV_preprocess(
-        cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-        &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
-        CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+    LA->sparseMV_preprocess(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
 }
 
 bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b)
@@ -247,9 +229,7 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
     checkCusparseErrors(cusparseDnVecSetValues(vecX, x.data));
 
     //calculate A*x0
-    checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
-                CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+    LA->sparseMV(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
 
     //r0 = b - A*x0
     subtractVectors<<<gpuBlocks, gpuThreads>>>(n, rk.data, b.data, wk.data);
@@ -262,13 +242,11 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
         precond->applyPreconditioner(uk.data, rk.data);
 
     //w0 = A*u0
-    checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-            &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
-            CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+    LA->sparseMV(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
     
     double *v = precond ? uk.data : rk.data;
     //gamma0 = (r0, u0)
-    checkCublasErrors(cublasDdot(cublasHandle, n, rk.data, 1, v, 1, gamma_kp));
+    LA->dot(rk.data, v, gamma_kp, n);
 
     copy_d2h(gamma_kp, &residual_norm, 1);
     if(residual_norm < tolerance_squared){
@@ -277,7 +255,7 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
     }
 
     //delta0 = (w0, u0)
-    checkCublasErrors(cublasDdot(cublasHandle, n, wk.data, 1, v, 1, delta_k));
+    LA->dot(wk.data, v, delta_k, n);
     //alpha0 = delta0 / gamma0; beta0 = 0
     initCoefficients<<<1, 1>>>(alpha_k, beta_k, gamma_kp, delta_k);
 
@@ -292,13 +270,11 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
             precond->applyPreconditioner(uk.data, rk.data);
 
         //w_i = A*u_i
-        checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
-                CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+        LA->sparseMV(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
         
         std::swap(gamma_kp, gamma_k);
         //gamma_i = (r_i, u_i)
-        checkCublasErrors(cublasDdot(cublasHandle, n, rk.data, 1, v, 1, gamma_kp));
+        LA->dot(rk.data, v, gamma_kp, n);        
 
         copy_d2h(gamma_kp, &residual_norm, 1);
         if(residual_norm < tolerance_squared){
@@ -307,7 +283,7 @@ bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<doub
         }
 
         //delta_i = (w_i, u_i)
-        checkCublasErrors(cublasDdot(cublasHandle, n, wk.data, 1, v, 1, delta_k));
+        LA->dot(wk.data, v, delta_k, n);
         //calculate alpha_i, beta_i
         updateCoefficients<<<1, 1>>>(alpha_k, beta_k, gamma_kp, gamma_k, delta_k);
     }
@@ -325,6 +301,9 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
 
     LinearSolver::solve(A, x, b);
 
+    if(precond)
+        precond->initialize(A);
+
     //save main pointer for the vector used in SpMV
     void* vecPointer = nullptr;
     checkCusparseErrors(cusparseDnVecGetValues(vecX, &vecPointer));
@@ -333,9 +312,7 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
     checkCusparseErrors(cusparseDnVecSetValues(vecX, x.data));
 
     //calculate A*x0
-    checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
-                CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+    LA->sparseMV(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
 
     //r0 = b - A*x0
     subtractVectors<<<gpuBlocks, gpuThreads>>>(n, rk.data, b.data, Apk.data);
@@ -351,7 +328,7 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
     copy_d2d(v, pk.data, n);
 
     //(r_0, z_0)
-    checkCublasErrors(cublasDdot(cublasHandle, n, rk.data, 1, v, 1, gamma_kp));
+    LA->dot(rk.data, v, gamma_kp, n);
 
     copy_d2h(gamma_kp, &residual_norm, 1);
     if(residual_norm < tolerance_squared){
@@ -363,12 +340,10 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
     while(it < maxIterations){
         ++it;
 
-        checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
-                CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+        LA->sparseMV(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
 
         //(p_i, Ap_i)
-        checkCublasErrors(cublasDdot(cublasHandle, n, pk.data, 1, Apk.data, 1, pkApk));
+        LA->dot(pk, Apk, pkApk);
 
         //update x_i and r_i vectors
         updateXR<<<gpuBlocks, gpuThreads>>>(n, x.data, rk.data, pk.data, Apk.data, gamma_kp, pkApk);
@@ -379,7 +354,7 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
 
         std::swap(gamma_kp, gamma_k);
         //gamma_i = (r_i, z_i)
-        checkCublasErrors(cublasDdot(cublasHandle, n, rk.data, 1, v, 1, gamma_kp));
+        LA->dot(rk.data, v, gamma_kp, n);
         copy_d2h(gamma_kp, &residual_norm, 1);
         if (residual_norm < tolerance_squared) {
             converged = true;
@@ -398,8 +373,8 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
     return converged;
 }
 
-SolverGMRES::SolverGMRES(double tolerance, int max_iterations, Preconditioner *precond_)
-    : LinearSolver(tolerance, max_iterations, precond_)
+SolverGMRES::SolverGMRES(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_)
+    : LinearSolver(tolerance, max_iterations, LA_, precond_)
 {
     allocate_device(&aux, 1);
     allocate_device(&d_abSpmv, 1);
@@ -434,18 +409,9 @@ void SolverGMRES::init(const SparseMatrixCSR &matrix)
     checkCusparseErrors(cusparseCreateDnVec(&vecX, n, Vmatrix.data, CUDA_R_64F));
     checkCusparseErrors(cusparseCreateDnVec(&vecY, n, Vmatrix.data + n, CUDA_R_64F));
 
-    size_t bufferSize = 0;
-
-    checkCusparseErrors(cusparseSpMV_bufferSize(
-        cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-        &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
-        CUSPARSE_SPMV_CSR_ALG1, &bufferSize));
+    const size_t bufferSize = LA->sparseMV_bufferSize(matA, vecX, vecY, &aSpmv, &bSpmv);
     checkCudaErrors(cudaMalloc(&dBuffer, bufferSize));
-
-    checkCusparseErrors(cusparseSpMV_preprocess(
-        cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-        &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
-        CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+    LA->sparseMV_preprocess(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
 }
 
 bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b)
@@ -453,7 +419,10 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
     bool converged = false;
 
     LinearSolver::solve(A, x, b);
-    
+
+    if(precond)
+        precond->initialize(A);
+
     //temporarily set the vector in SpMV to x0
     checkCusparseErrors(cusparseDnVecSetValues(vecX, x.data));
 
@@ -461,9 +430,7 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
     checkCusparseErrors(cusparseDnVecSetValues(vecY, v_kp));
 
     //calculate A*x0
-    checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
-                CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+    LA->sparseMV(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
 
     //r0 = b - A*x0
     subtractVectors<<<gpuBlocks, gpuThreads>>>(n, v_kp, b.data, v_kp);
@@ -473,7 +440,7 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
         precond->applyPreconditioner(v_kp, v_kp);
 
     //compute ||r0||, which becomes first element of the beta vector
-    checkCublasErrors(cublasDnrm2(cublasHandle, n, v_kp, 1, beta.data));
+    LA->normSquared(v_kp, beta.data, n);
 
     copy_d2h(beta.data, &residual_norm, 1);
     if (residual_norm < tolerance) {
@@ -497,9 +464,7 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
         checkCusparseErrors(cusparseDnVecSetValues(vecY, v_kp));
 
         //perform sparse matrix-vector multiplication v_{k+1} = A * v_k using Cusparse
-        checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                &aSpmv, matA, vecX, &bSpmv, vecY, CUDA_R_64F,
-                CUSPARSE_SPMV_CSR_ALG1, dBuffer));
+        LA->sparseMV(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
 
         if(precond)
             precond->applyPreconditioner(v_kp, v_kp);
@@ -512,13 +477,13 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
             //h_{ik} = v_{k+1} * v_i
             const double *v_i = Vmatrix.data + n * i;
             double *h_ik = h_1k + i;
-            checkCublasErrors(cublasDdot(cublasHandle, n, v_kp, 1, v_i, 1, h_ik));
+            LA->dot(v_kp, v_i, h_ik, n);
 
             daxpy<<<gpuBlocks, gpuThreads>>>(n, v_kp, v_i, h_ik, true);
         }
 
         //calculate norm ||v_{k+1}||
-        checkCublasErrors(cublasDnrm2(cublasHandle, n, v_kp, 1, aux));
+        LA->normSquared(v_kp, aux, n);
         
         //normalize v_{k+1}
         scaleVector<<<gpuBlocks, gpuThreads>>>(n, v_kp, v_kp, aux, true);
@@ -539,11 +504,10 @@ bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const
     if (converged) {
         //copy beta into y as triangular solve from Cublas overwrites the right hand side vector
         copy_d2d(beta.data, y.data, it);
-        checkCublasErrors(cublasDtrsv(cublasHandle, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, it, Hmatrix.data,
-            maxIterations, y.data, 1));
-
+        LA->solveGeneralTriangularSystem(Hmatrix.data, y.data, it, maxIterations);
+        
         //update x = x0 + V * y
-        checkCublasErrors(cublasDgemv(cublasHandle, CUBLAS_OP_N, n, it, d_abSpmv, Vmatrix.data, n, y.data, 1, d_abSpmv, x.data, 1));
+        LA->generalMV(Vmatrix.data, y.data, x.data, d_abSpmv, d_abSpmv, n, it, n);
 
         printf("Solver converged with residual=%e, no. of iterations=%d\n", residual_norm, it);
     } else

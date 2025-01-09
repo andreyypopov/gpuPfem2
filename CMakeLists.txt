@@ -17,19 +17,21 @@ SET(PROJECT_SOURCE_PATH ${PROJECT_ROOT_PATH}/src)
 SET(src_files
 	${PROJECT_SOURCE_PATH}/data_export.cu
 	${PROJECT_SOURCE_PATH}/Dirichlet_bcs.cu
-	${PROJECT_SOURCE_PATH}/linear_solver.cu
 	${PROJECT_SOURCE_PATH}/mesh_2d.cu
 	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cu
-	${PROJECT_SOURCE_PATH}/preconditioners.cu
 	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cu
 	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cu
-	${PROJECT_SOURCE_PATH}/sparse_matrix.cu
 	)
 SET(src_common_files
 	${PROJECT_SOURCE_PATH}/common/cuda_helper.cu
 	${PROJECT_SOURCE_PATH}/common/cuda_math.cu
 	${PROJECT_SOURCE_PATH}/common/utilities.cpp
 )
+SET(src_linear_algebra_files
+	${PROJECT_SOURCE_PATH}/linear_algebra/linear_solver.cu
+	${PROJECT_SOURCE_PATH}/linear_algebra/preconditioners.cu
+	${PROJECT_SOURCE_PATH}/linear_algebra/sparse_matrix.cu
+	)
 SET(src_particle_files
 	${PROJECT_SOURCE_PATH}/particles/particle_2d.cu
 	${PROJECT_SOURCE_PATH}/particles/particle_handler_2d.cu
@@ -38,14 +40,11 @@ SET(header_files
 	${PROJECT_SOURCE_PATH}/data_export.cuh
 	${PROJECT_SOURCE_PATH}/Dirichlet_bcs.cuh
 	${PROJECT_SOURCE_PATH}/geometry.cuh
-	${PROJECT_SOURCE_PATH}/linear_solver.cuh
 	${PROJECT_SOURCE_PATH}/mesh_2d.cuh
 	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cuh
 	${PROJECT_SOURCE_PATH}/parameters.cuh
-	${PROJECT_SOURCE_PATH}/preconditioners.cuh
 	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cuh
 	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cuh
-	${PROJECT_SOURCE_PATH}/sparse_matrix.cuh
 	)
 SET(header_particle_files
 	${PROJECT_SOURCE_PATH}/particles/particle_2d.cuh
@@ -61,6 +60,12 @@ SET(header_common_files
 	${PROJECT_SOURCE_PATH}/common/matrix3x3.cuh
 	${PROJECT_SOURCE_PATH}/common/profiling.h
 	${PROJECT_SOURCE_PATH}/common/utilities.h
+	)
+SET(header_linear_algebra_files
+	${PROJECT_SOURCE_PATH}/linear_algebra/linear_algebra.h
+	${PROJECT_SOURCE_PATH}/linear_algebra/linear_solver.cuh
+	${PROJECT_SOURCE_PATH}/linear_algebra/preconditioners.cuh
+	${PROJECT_SOURCE_PATH}/linear_algebra/sparse_matrix.cuh
 	)
 
 source_group("gpuFem" FILES
@@ -82,8 +87,8 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_INSTALL_PREFIX "${PROJECT_ROOT_PATH}/install" CACHE PATH "Library installation path" FORCE)
 endif()
 
-add_library(gpuFemLib SHARED ${src_files} ${src_particle_files} ${src_common_files} ${header_files}
-	${header_particle_files} ${header_common_files})
+add_library(gpuFemLib SHARED ${src_files} ${src_particle_files} ${src_common_files} ${src_linear_algebra_files} ${header_files}
+	${header_particle_files} ${header_common_files} ${header_linear_algebra_files})
 
 setup_openmp(${PROJECT_NAME})
 setup_cuda(${PROJECT_NAME})
@@ -91,6 +96,7 @@ setup_cuda(${PROJECT_NAME})
 install(TARGETS gpuFemLib)
 install(FILES ${header_files} DESTINATION include)
 install(FILES ${header_common_files} DESTINATION include/common)
+install(FILES ${header_linear_algebra_files} DESTINATION include/linear_algebra)
 install(FILES ${header_particle_files} DESTINATION include/particles)
 
 set_target_properties(gpuFemLib PROPERTIES VERSION 1.0)

@@ -3,7 +3,7 @@
 
 #include "common/constants.h"
 #include "mesh_2d.cuh"
-#include "sparse_matrix.cuh"
+#include "linear_algebra/sparse_matrix.cuh"
 
 __device__ inline Point2 shapeFuncGrad(int i) {
     switch (i)

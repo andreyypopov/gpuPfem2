@@ -1,7 +1,8 @@
 #ifndef linear_solver_cuh
 #define linear_solver_cuh
 
-#include "common/device_vector.cuh"
+#include "../common/device_vector.cuh"
+#include "linear_algebra.h"
 #include "preconditioners.cuh"
 #include "sparse_matrix.cuh"
 
@@ -14,7 +15,7 @@
 class LinearSolver
 {
 public:
-    LinearSolver(double tolerance, int max_iterations, Preconditioner *precond_ = nullptr);
+    LinearSolver(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_ = nullptr);
     virtual ~LinearSolver();
 
     virtual void init(const SparseMatrixCSR& matrix);
@@ -23,8 +24,7 @@ public:
 
 protected:
     //cusparse and cublas handles
-    cublasHandle_t cublasHandle;
-    cusparseHandle_t cusparseHandle;
+    const LinearAlgebra *LA;
     cusparseSpMatDescr_t matA;
     cusparseDnVecDescr_t vecX, vecY;
     void* dBuffer;
@@ -60,7 +60,7 @@ protected:
 class SolverCG : public LinearSolver
 {
 public:
-    SolverCG(double tolerance, int max_iterations, Preconditioner *precond_ = nullptr);
+    SolverCG(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_ = nullptr);
     virtual ~SolverCG();
     
     virtual void init(const SparseMatrixCSR &matrix) override;
@@ -98,7 +98,7 @@ private:
 class SolverGMRES : public LinearSolver
 {
 public:
-    SolverGMRES(double tolerance, int max_iterations, Preconditioner *precond_ = nullptr);
+    SolverGMRES(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_ = nullptr);
     virtual ~SolverGMRES();
 
     virtual void init(const SparseMatrixCSR &matrix) override;

@@ -108,7 +108,8 @@ public:
         }
     }
 
-    bool exportToFile(const std::string& filename){
+    bool exportToFile(const std::string& filename) const
+    {
         std::ofstream outputFile(filename.c_str());
 
         std::vector<T> hostData(size);
