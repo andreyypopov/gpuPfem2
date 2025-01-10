@@ -555,7 +555,7 @@ int main(int argc, char *argv[]){
     hostParams.dt = 0.01;
     hostParams.tFinal = 5.0;
     hostParams.outputFrequency = 10;
-    hostParams.exportParticles = 1;
+    hostParams.exportParticles = 0;
     copy_h2const(&hostParams, &simParams, 1);
 
     //matrices, solution and right-hand-side vectors for both component of velocity field (prediction and final ones) and pressure
@@ -600,13 +600,12 @@ int main(int argc, char *argv[]){
 
     LinearAlgebra LA;
 
-    PreconditionerILU iluPrecond(pressureMatrix, &LA);
     PreconditionerJacobi JacobiPrecond(problemSize, &LA);
     
     SolverGMRES velocityPredictionSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &JacobiPrecond);
     velocityPredictionSolver.init(velocityPredictionMatrix[0]);
 
-    SolverCG pressureSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &iluPrecond);
+    SolverCG pressureSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &JacobiPrecond);
     pressureSolver.init(pressureMatrix);
 
     SolverCG velocityCorrectionSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &JacobiPrecond);
