@@ -72,4 +72,37 @@ private:
     bool analysisRequired;
 };
 
+class PreconditionerIC : public Preconditioner
+{
+public:
+    PreconditionerIC(const SparseMatrixCSR &matrix, const LinearAlgebra *LA_);
+    virtual ~PreconditionerIC();
+
+    virtual void initialize(const SparseMatrixCSR &matrix) override;
+
+    virtual void applyPreconditioner(double *dest, const double *src) override;
+
+private:
+    int nnz;
+    
+    void* icBuffer;
+    void* lSpsvBuffer;
+    void* ltSpsvBuffer;
+
+    csric02Info_t icInfo;
+    cusparseSpSVDescr_t lSpsvDescription, ltSpsvDescription;
+
+    double alpha;
+
+    cusparseMatDescr_t icMatrix;
+    deviceVector<double> matrixValues;
+
+    deviceVector<double> auxVector;
+
+    cusparseSpMatDescr_t lMatrix;
+    cusparseDnVecDescr_t destVec, srcVec, auxVec;
+
+    bool analysisRequired;
+};
+
 #endif // PRECONDITIONERS_CUH

@@ -132,3 +132,82 @@ void PreconditionerILU::applyPreconditioner(double *dest, const double *src)
     LA->solveSparseTriangularSystem(lMatrix, srcVec, auxVec, &alpha, lSpsvDescription);
     LA->solveSparseTriangularSystem(uMatrix, auxVec, destVec, &alpha, uSpsvDescription);
 }
+
+PreconditionerIC::PreconditionerIC(const SparseMatrixCSR &matrix, const LinearAlgebra *LA_)
+    : Preconditioner(matrix.getRows(), LA_)
+    , nnz(matrix.getTotalElements())
+    , alpha(1.0)
+{
+    checkCusparseErrors(cusparseCreateCsric02Info(&icInfo));
+
+    checkCusparseErrors(cusparseSpSV_createDescr(&lSpsvDescription));
+    checkCusparseErrors(cusparseSpSV_createDescr(&ltSpsvDescription));
+
+    checkCusparseErrors(cusparseCreateMatDescr(&icMatrix));
+    checkCusparseErrors(cusparseSetMatIndexBase(icMatrix, CUSPARSE_INDEX_BASE_ZERO));
+    checkCusparseErrors(cusparseSetMatType(icMatrix, CUSPARSE_MATRIX_TYPE_GENERAL));
+
+    matrixValues.allocate(nnz);
+
+    checkCusparseErrors(cusparseCreateCsr(&lMatrix, n, n, nnz,
+        matrix.getRowOffset(), matrix.getColIndices(), matrixValues.data,
+        CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
+        CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F));
+    cusparseFillMode_t lFillMode = CUSPARSE_FILL_MODE_LOWER;
+    cusparseDiagType_t lDiagType = CUSPARSE_DIAG_TYPE_NON_UNIT;
+    checkCusparseErrors(cusparseSpMatSetAttribute(lMatrix, CUSPARSE_SPMAT_FILL_MODE, &lFillMode, sizeof(lFillMode)));
+    checkCusparseErrors(cusparseSpMatSetAttribute(lMatrix, CUSPARSE_SPMAT_DIAG_TYPE, &lDiagType, sizeof(lDiagType)));
+
+    auxVector.allocate(n);
+    //at this point all vector description are set to the auxiliary vector
+    //(will be later updated for src and dest vectors at the stage of preconditioner initialization)
+    checkCusparseErrors(cusparseCreateDnVec(&auxVec, n, auxVector.data, CUDA_R_64F));
+    checkCusparseErrors(cusparseCreateDnVec(&destVec, n, auxVector.data, CUDA_R_64F));
+    checkCusparseErrors(cusparseCreateDnVec(&srcVec, n, auxVector.data, CUDA_R_64F));
+
+    const int icBufferSize = LA->incompleteCholesky_bufferSize(icMatrix, matrix.getRowOffset(), matrix.getColIndices(), matrix.getMatrixValues(), icInfo, n, nnz);
+    const int lBuffersize = LA->solveSparseTriangularSystem_bufferSize(lMatrix, srcVec, auxVec, &alpha, lSpsvDescription);
+    const int ltBufferSize = LA->solveSparseTriangularSystem_bufferSize(lMatrix, auxVec, destVec, &alpha, ltSpsvDescription, true);
+
+    checkCudaErrors(cudaMalloc(&icBuffer, icBufferSize));
+    checkCudaErrors(cudaMalloc(&lSpsvBuffer, lBuffersize));
+    checkCudaErrors(cudaMalloc(&ltSpsvBuffer, ltBufferSize));
+}
+
+PreconditionerIC::~PreconditionerIC()
+{
+    checkCudaErrors(cudaFree(icBuffer));
+    checkCudaErrors(cudaFree(lSpsvBuffer));
+    checkCudaErrors(cudaFree(ltSpsvBuffer));
+    checkCusparseErrors(cusparseDestroyCsric02Info(icInfo));
+    checkCusparseErrors(cusparseSpSV_destroyDescr(lSpsvDescription));
+    checkCusparseErrors(cusparseSpSV_destroyDescr(ltSpsvDescription));
+
+    checkCusparseErrors(cusparseDestroyMatDescr(icMatrix));
+    checkCusparseErrors(cusparseDestroySpMat(lMatrix));
+    checkCusparseErrors(cusparseDestroyDnVec(auxVec));
+    checkCusparseErrors(cusparseDestroyDnVec(destVec));
+    checkCusparseErrors(cusparseDestroyDnVec(srcVec));
+}
+
+void PreconditionerIC::initialize(const SparseMatrixCSR &csrMatrix)
+{
+    copy_d2d(csrMatrix.getMatrixValues(), matrixValues.data, nnz);
+
+    LA->incompleteCholesky(icMatrix, csrMatrix.getRowOffset(), csrMatrix.getColIndices(), matrixValues.data, icInfo, n, nnz, icBuffer);
+    analysisRequired = true;
+}
+
+void PreconditionerIC::applyPreconditioner(double *dest, const double *src)
+{
+    if(analysisRequired){
+        checkCusparseErrors(cusparseDnVecSetValues(srcVec, (void*)src));
+        checkCusparseErrors(cusparseDnVecSetValues(destVec, (void*)dest));
+
+        LA->solveSparseTriangularSystem_analysis(lMatrix, srcVec, auxVec, &alpha, lSpsvDescription, lSpsvBuffer);
+        LA->solveSparseTriangularSystem_analysis(lMatrix, auxVec, destVec, &alpha, ltSpsvDescription, ltSpsvBuffer, true);
+    }
+
+    LA->solveSparseTriangularSystem(lMatrix, srcVec, auxVec, &alpha, lSpsvDescription);
+    LA->solveSparseTriangularSystem(lMatrix, auxVec, destVec, &alpha, ltSpsvDescription, true);
+}
