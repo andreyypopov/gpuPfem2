@@ -14,7 +14,7 @@ public:
 
     virtual void initialize(const SparseMatrixCSR &csrMatrix) = 0;
 
-    virtual void applyPreconditioner(double *dest, const double *src) const = 0;
+    virtual void applyPreconditioner(double *dest, const double *src) = 0;
 
 protected:
     int n;
@@ -33,7 +33,7 @@ public:
 
     virtual void initialize(const SparseMatrixCSR &csrMatrix) override;
 
-    virtual void applyPreconditioner(double *dest, const double *src) const override;
+    virtual void applyPreconditioner(double *dest, const double *src) override;
 
 private:
     deviceVector<double> invDiagValues;
@@ -47,15 +47,17 @@ public:
 
     virtual void initialize(const SparseMatrixCSR &matrix) override;
 
-    virtual void applyPreconditioner(double *dest, const double *src) const override;
+    virtual void applyPreconditioner(double *dest, const double *src) override;
 
 private:
     int nnz;
     
-    void* dBuffer;
+    void* iluBuffer;
+    void* lSpsvBuffer;
+    void* uSpsvBuffer;
 
     csrilu02Info_t iluInfo;
-    cusparseSpSVDescr_t spsvDescription;
+    cusparseSpSVDescr_t lSpsvDescription, uSpsvDescription;
 
     double alpha;
 
@@ -66,6 +68,8 @@ private:
 
     cusparseSpMatDescr_t lMatrix, uMatrix;
     cusparseDnVecDescr_t destVec, srcVec, auxVec;
+
+    bool analysisRequired;
 };
 
 #endif // PRECONDITIONERS_CUH

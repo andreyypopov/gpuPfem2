@@ -98,18 +98,23 @@ public:
         const double *alpha, const cusparseSpSVDescr_t &spsvDescription) const
     {
         size_t res;
-        checkCusparseErrors(cusparseSpSV_bufferSize(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, matrix,
+        checkCusparseErrors(cusparseSpSV_bufferSize(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, alpha, matrix,
             vec, result, CUDA_R_64F, CUSPARSE_SPSV_ALG_DEFAULT, spsvDescription, &res));
 
         return res;
     }
 
-    void solveSparseTriangularSystem(const cusparseConstSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
+    void solveSparseTriangularSystem_analysis(const cusparseConstSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
         const double *alpha, const cusparseSpSVDescr_t &spsvDescription, void *buffer) const
     {
-        checkCusparseErrors(cusparseSpSV_analysis(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha,
+        checkCusparseErrors(cusparseSpSV_analysis(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, alpha,
             matrix, vec, result, CUDA_R_64F, CUSPARSE_SPSV_ALG_DEFAULT, spsvDescription, buffer));
-        checkCusparseErrors(cusparseSpSV_solve(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha,
+    }
+
+    void solveSparseTriangularSystem(const cusparseConstSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
+        const double *alpha, const cusparseSpSVDescr_t &spsvDescription) const
+    {
+        checkCusparseErrors(cusparseSpSV_solve(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, alpha,
             matrix, vec, result, CUDA_R_64F, CUSPARSE_SPSV_ALG_DEFAULT, spsvDescription));
     }
 

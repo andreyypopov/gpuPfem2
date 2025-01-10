@@ -40,7 +40,7 @@ void PreconditionerJacobi::initialize(const SparseMatrixCSR &csrMatrix)
     extractDiagonal<<<gpuBlocks, gpuThreads>>>(n, invDiagValues.data, csrMatrix.getRowOffset(), csrMatrix.getColIndices(), csrMatrix.getMatrixValues());
 }
 
-void PreconditionerJacobi::applyPreconditioner(double *dest, const double *src) const
+void PreconditionerJacobi::applyPreconditioner(double *dest, const double *src)
 {
     applyJacobiPreconditioner<<<gpuBlocks, gpuThreads>>>(n, dest, src, invDiagValues.data);
 }
@@ -52,7 +52,8 @@ PreconditionerILU::PreconditionerILU(const SparseMatrixCSR &matrix, const Linear
 {
     checkCusparseErrors(cusparseCreateCsrilu02Info(&iluInfo));
 
-    checkCusparseErrors(cusparseSpSV_createDescr(&spsvDescription));
+    checkCusparseErrors(cusparseSpSV_createDescr(&lSpsvDescription));
+    checkCusparseErrors(cusparseSpSV_createDescr(&uSpsvDescription));
 
     checkCusparseErrors(cusparseCreateMatDescr(&iluMatrix));
     checkCusparseErrors(cusparseSetMatIndexBase(iluMatrix, CUSPARSE_INDEX_BASE_ZERO));
@@ -75,7 +76,7 @@ PreconditionerILU::PreconditionerILU(const SparseMatrixCSR &matrix, const Linear
     checkCusparseErrors(cusparseSpMatSetAttribute(lMatrix, CUSPARSE_SPMAT_FILL_MODE, &lFillMode, sizeof(lFillMode)));
     checkCusparseErrors(cusparseSpMatSetAttribute(uMatrix, CUSPARSE_SPMAT_FILL_MODE, &uFillMode, sizeof(uFillMode)));
     checkCusparseErrors(cusparseSpMatSetAttribute(lMatrix, CUSPARSE_SPMAT_DIAG_TYPE, &lDiagType, sizeof(lDiagType)));
-    checkCusparseErrors(cusparseSpMatSetAttribute(uMatrix, CUSPARSE_SPMAT_FILL_MODE, &uDiagType, sizeof(uDiagType)));
+    checkCusparseErrors(cusparseSpMatSetAttribute(uMatrix, CUSPARSE_SPMAT_DIAG_TYPE, &uDiagType, sizeof(uDiagType)));
 
     auxVector.allocate(n);
     //at this point all vector description are set to the auxiliary vector
@@ -85,19 +86,22 @@ PreconditionerILU::PreconditionerILU(const SparseMatrixCSR &matrix, const Linear
     checkCusparseErrors(cusparseCreateDnVec(&srcVec, n, auxVector.data, CUDA_R_64F));
 
     const int iluBufferSize = LA->incompleteLU_bufferSize(iluMatrix, matrix.getRowOffset(), matrix.getColIndices(), matrix.getMatrixValues(), iluInfo, n, nnz);
-    const int lBuffersize = LA->solveSparseTriangularSystem_bufferSize(lMatrix, srcVec, auxVec, &alpha, spsvDescription);
-    const int uBufferSize = LA->solveSparseTriangularSystem_bufferSize(uMatrix, auxVec, destVec, &alpha, spsvDescription);
-    
-    const int bufferSize = std::max(iluBufferSize, std::max(lBuffersize, uBufferSize));
+    const int lBuffersize = LA->solveSparseTriangularSystem_bufferSize(lMatrix, srcVec, auxVec, &alpha, lSpsvDescription);
+    const int uBufferSize = LA->solveSparseTriangularSystem_bufferSize(uMatrix, auxVec, destVec, &alpha, uSpsvDescription);
 
-    checkCudaErrors(cudaMalloc(&dBuffer, bufferSize));
+    checkCudaErrors(cudaMalloc(&iluBuffer, iluBufferSize));
+    checkCudaErrors(cudaMalloc(&lSpsvBuffer, lBuffersize));
+    checkCudaErrors(cudaMalloc(&uSpsvBuffer, uBufferSize));
 }
 
 PreconditionerILU::~PreconditionerILU()
 {
-    checkCudaErrors(cudaFree(dBuffer));
+    checkCudaErrors(cudaFree(iluBuffer));
+    checkCudaErrors(cudaFree(lSpsvBuffer));
+    checkCudaErrors(cudaFree(uSpsvBuffer));
     checkCusparseErrors(cusparseDestroyCsrilu02Info(iluInfo));
-    checkCusparseErrors(cusparseSpSV_destroyDescr(spsvDescription));
+    checkCusparseErrors(cusparseSpSV_destroyDescr(lSpsvDescription));
+    checkCusparseErrors(cusparseSpSV_destroyDescr(uSpsvDescription));
 
     checkCusparseErrors(cusparseDestroyMatDescr(iluMatrix));
     checkCusparseErrors(cusparseDestroySpMat(lMatrix));
@@ -111,14 +115,20 @@ void PreconditionerILU::initialize(const SparseMatrixCSR &csrMatrix)
 {
     copy_d2d(csrMatrix.getMatrixValues(), matrixValues.data, nnz);
 
-    LA->incompleteLU(iluMatrix, csrMatrix.getRowOffset(), csrMatrix.getColIndices(), matrixValues.data, iluInfo, n, nnz, dBuffer);
+    LA->incompleteLU(iluMatrix, csrMatrix.getRowOffset(), csrMatrix.getColIndices(), matrixValues.data, iluInfo, n, nnz, iluBuffer);
+    analysisRequired = true;
 }
 
-void PreconditionerILU::applyPreconditioner(double *dest, const double *src) const
+void PreconditionerILU::applyPreconditioner(double *dest, const double *src)
 {
-    checkCusparseErrors(cusparseDnVecSetValues(srcVec, (void*)src));
-    checkCusparseErrors(cusparseDnVecSetValues(destVec, (void*)dest));
+    if(analysisRequired){
+        checkCusparseErrors(cusparseDnVecSetValues(srcVec, (void*)src));
+        checkCusparseErrors(cusparseDnVecSetValues(destVec, (void*)dest));
 
-    LA->solveSparseTriangularSystem(lMatrix, srcVec, auxVec, &alpha, spsvDescription, dBuffer);
-    LA->solveSparseTriangularSystem(uMatrix, auxVec, destVec, &alpha, spsvDescription, dBuffer);
+        LA->solveSparseTriangularSystem_analysis(lMatrix, srcVec, auxVec, &alpha, lSpsvDescription, lSpsvBuffer);
+        LA->solveSparseTriangularSystem_analysis(uMatrix, auxVec, destVec, &alpha, uSpsvDescription, uSpsvBuffer);
+    }
+
+    LA->solveSparseTriangularSystem(lMatrix, srcVec, auxVec, &alpha, lSpsvDescription);
+    LA->solveSparseTriangularSystem(uMatrix, auxVec, destVec, &alpha, uSpsvDescription);
 }
