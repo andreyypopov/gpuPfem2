@@ -14,7 +14,7 @@ Solution of the 2D problem using PFEM-2. The whole pipeline, including both part
 6. Projection of velocity from particles onto grid
 7. Assembling of the system matrix and right hand side vector by means of numerical integration using Gauss quadrature rules
 8. Application of the Dirichlet boundary conditions (changes to both rows and columns corresponding to these boundary degrees of freedom)
-9. Solution of the linear system using PCG or GMRES (with or without Jacobi preconditioner)
+9. Solution of the linear system using PCG or GMRES with or without a preconditioner (Jacobi, Incomplete LU/Cholesky decomposition)
 10. Correction of particle velocity
 11. Export of results to a VTK (XML-type) file
 

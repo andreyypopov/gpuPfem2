@@ -1,10 +1,8 @@
 #include "data_export.cuh"
 #include "Dirichlet_bcs.cuh"
 #include "geometry.cuh"
-#include "linear_solver.cuh"
 #include "mesh_2d.cuh"
 #include "numerical_integrator_2d.cuh"
-#include "sparse_matrix.cuh"
 #include "quadrature_formula_1d.cuh"
 #include "quadrature_formula_2d.cuh"
 #include "parameters.cuh"
@@ -13,6 +11,11 @@
 #include "common/gpu_timer.cuh"
 #include "common/profiling.h"
 #include "common/utilities.h"
+
+#include "linear_algebra/linear_algebra.h"
+#include "linear_algebra/linear_solver.cuh"
+#include "linear_algebra/preconditioners.cuh"
+#include "linear_algebra/sparse_matrix.cuh"
 
 #include "particles/particle_handler_2d.cuh"
 
@@ -552,7 +555,7 @@ int main(int argc, char *argv[]){
     hostParams.dt = 0.01;
     hostParams.tFinal = 5.0;
     hostParams.outputFrequency = 10;
-    hostParams.exportParticles = 1;
+    hostParams.exportParticles = 0;
     copy_h2const(&hostParams, &simParams, 1);
 
     //matrices, solution and right-hand-side vectors for both component of velocity field (prediction and final ones) and pressure
@@ -595,11 +598,18 @@ int main(int argc, char *argv[]){
 
     particleHandler.initParticleVelocity(integrator.getVelocitySolution());
 
-    SolverCG cgSolver(hostParams.tolerance, hostParams.maxIterations);
-    cgSolver.init(pressureMatrix, true);
+    LinearAlgebra LA;
 
-    SolverGMRES gmresSolver(hostParams.tolerance, hostParams.maxIterations);
-    gmresSolver.init(velocityCorrectionMatrix[0], true);
+    PreconditionerJacobi JacobiPrecond(problemSize, &LA);
+    
+    SolverGMRES velocityPredictionSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &JacobiPrecond);
+    velocityPredictionSolver.init(velocityPredictionMatrix[0]);
+
+    SolverCG pressureSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &JacobiPrecond);
+    pressureSolver.init(pressureMatrix);
+
+    SolverCG velocityCorrectionSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &JacobiPrecond);
+    velocityCorrectionSolver.init(velocityCorrectionMatrix[0]);
 
     DataExport dataExport(mesh, &particleHandler);
     dataExport.addScalarDataVector(velocitySolution[0], "velX");
@@ -646,7 +656,7 @@ int main(int argc, char *argv[]){
             for (int i = 0; i < 2; ++i) {
                 velocityPredictionBCs[i].setDirichletValues(velocityBCs[i], pressureSolution, i);
                 velocityPredictionBCs[i].applyBCs(velocityPredictionMatrix[i], velocityPredictionRhs[i]);
-                gmresSolver.solve(velocityPredictionMatrix[i], velocityPrediction[i], velocityPredictionRhs[i]);
+                velocityPredictionSolver.solve(velocityPredictionMatrix[i], velocityPrediction[i], velocityPredictionRhs[i]);
             }
             pScope.stop();
             pScope.stop();
@@ -661,7 +671,7 @@ int main(int argc, char *argv[]){
             pressureBCs.applyBCs(pressureMatrix, pressureRhs);
             pScope.stop();
             pScope.start("Linear solver");
-            cgSolver.solve(pressureMatrix, pressureSolution, pressureRhs);
+            pressureSolver.solve(pressureMatrix, pressureSolution, pressureRhs);
             pScope.stop();
             pScope.stop();
 
@@ -678,7 +688,7 @@ int main(int argc, char *argv[]){
             pScope.start("Linear solver");
             for (int i = 0; i < 2; ++i) {
                 velocityBCs[i].applyBCs(velocityCorrectionMatrix[i], velocityCorrectionRhs[i]);
-                cgSolver.solve(velocityCorrectionMatrix[i], velocitySolution[i], velocityCorrectionRhs[i]);
+                velocityCorrectionSolver.solve(velocityCorrectionMatrix[i], velocitySolution[i], velocityCorrectionRhs[i]);
             }
             pScope.stop();
             pScope.stop();

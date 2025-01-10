@@ -1,9 +1,9 @@
 #ifndef SPARSE_MATRIX_CUH
 #define SPARSE_MATRIX_CUH
 
-#include "common/cuda_memory.cuh"
-#include "common/device_vector.cuh"
-#include "mesh_2d.cuh"
+#include "../common/cuda_memory.cuh"
+#include "../common/device_vector.cuh"
+#include "../mesh_2d.cuh"
 
 class SparseMatrixCSR
 {
