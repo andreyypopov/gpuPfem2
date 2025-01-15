@@ -1,10 +1,8 @@
 #include "data_export.cuh"
 #include "Dirichlet_bcs.cuh"
 #include "geometry.cuh"
-#include "linear_solver.cuh"
 #include "mesh_2d.cuh"
 #include "numerical_integrator_2d.cuh"
-#include "sparse_matrix.cuh"
 #include "quadrature_formula_1d.cuh"
 #include "quadrature_formula_2d.cuh"
 #include "parameters.cuh"
@@ -12,6 +10,11 @@
 #include "common/cuda_math.cuh"
 #include "common/gpu_timer.cuh"
 #include "common/utilities.h"
+
+#include "linear_algebra/linear_algebra.h"
+#include "linear_algebra/linear_solver.cuh"
+#include "linear_algebra/preconditioners.cuh"
+#include "linear_algebra/sparse_matrix.cuh"
 
 #include <vector>
 
@@ -571,11 +574,14 @@ int main(int argc, char *argv[]){
     integrator.setupPressure(pressureMatrix, pressureRhs, pressureSolution);
     integrator.setupVelocityCorrection(velocityCorrectionMatrix, velocityCorrectionRhs, velocitySolution, velocitySolutionOld);
 
-    SolverCG cgSolver(hostParams.tolerance, hostParams.maxIterations);
-    cgSolver.init(pressureMatrix, true);
+	LinearAlgebra LA;
 
-    SolverGMRES gmresSolver(hostParams.tolerance, hostParams.maxIterations);
-    gmresSolver.init(velocityCorrectionMatrix[0], true);
+	PreconditionerJacobi precond(problemSize, &LA);
+    SolverCG cgSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &precond);
+    cgSolver.init(pressureMatrix);
+
+    SolverGMRES gmresSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &precond);
+    gmresSolver.init(velocityPredictionMatrix[0]);
 
     DataExport dataExport(mesh);
     dataExport.addScalarDataVector(velocitySolution[0], "velX");
