@@ -119,4 +119,73 @@ __device__ inline int indexBinarySearch(unsigned int targetElement, const int* e
     return -1;
 }
 
+template <int blockSize, class T, int numValues = 1>
+__global__ void reduceVector(int n, const T *vector, T *res)
+{
+    volatile __shared__ T sharedData[blockSize * numValues];
+    unsigned int lIdx = threadIdx.x;
+
+    for(int k = 0; k < numValues; ++k)
+        sharedData[numValues * lIdx + k] = 0;
+    unsigned int i = lIdx;
+    while(i < n / numValues){
+        for(int k = 0; k < numValues; ++k)
+            sharedData[numValues * lIdx + k] += vector[numValues * i + k];
+        i += blockSize;
+    }
+
+    __syncthreads();
+
+    if(blockSize >= 512){
+        if(lIdx < 256)
+            for(int k = 0; k < numValues; ++k)
+                sharedData[numValues * lIdx + k] += sharedData[numValues * (lIdx + 256) + k];
+        __syncthreads();
+    }
+
+    if(blockSize >= 256){
+        if(lIdx < 128)
+            for(int k = 0; k < numValues; ++k)
+                sharedData[numValues * lIdx + k] += sharedData[numValues * (lIdx + 128) + k];
+        __syncthreads();
+    }
+
+    if(blockSize >= 128){
+        if(lIdx < 64)
+            for(int k = 0; k < numValues; ++k)
+                sharedData[numValues * lIdx + k] += sharedData[numValues * (lIdx + 64) + k];
+        __syncthreads();
+    }
+
+    if(lIdx < 32){
+        if(blockSize >= 64)
+            for(int k = 0; k < numValues; ++k)
+                sharedData[numValues * lIdx + k] += sharedData[numValues * (lIdx + 32) + k];
+
+        if(blockSize >= 32)
+            for(int k = 0; k < numValues; ++k)
+                sharedData[numValues * lIdx + k] += sharedData[numValues * (lIdx + 16) + k];
+
+        if(blockSize >= 16)
+            for(int k = 0; k < numValues; ++k)
+                sharedData[numValues * lIdx + k] += sharedData[numValues * (lIdx + 8) + k];
+
+        if(blockSize >= 8)
+            for(int k = 0; k < numValues; ++k)
+                sharedData[numValues * lIdx + k] += sharedData[numValues * (lIdx + 4) + k];
+
+        if(blockSize >= 4)
+            for(int k = 0; k < numValues; ++k)
+                sharedData[numValues * lIdx + k] += sharedData[numValues * (lIdx + 2) + k];
+
+        if(blockSize >= 2)
+            for(int k = 0; k < numValues; ++k)
+                sharedData[numValues * lIdx + k] += sharedData[numValues * (lIdx + 1) + k];
+    }
+
+    if(lIdx == 0)
+        for(int k = 0; k < numValues; ++k)
+            res[k] = sharedData[k];
+} 
+
 #endif // CUDA_HELPER_CUH

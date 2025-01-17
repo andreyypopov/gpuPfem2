@@ -1,10 +1,8 @@
 #include "data_export.cuh"
 #include "Dirichlet_bcs.cuh"
 #include "geometry.cuh"
-#include "linear_solver.cuh"
 #include "mesh_2d.cuh"
 #include "numerical_integrator_2d.cuh"
-#include "sparse_matrix.cuh"
 #include "quadrature_formula_1d.cuh"
 #include "quadrature_formula_2d.cuh"
 #include "parameters.cuh"
@@ -13,6 +11,10 @@
 #include "common/gpu_timer.cuh"
 #include "common/profiling.h"
 #include "common/utilities.h"
+
+#include "linear_algebra/linear_algebra.h"
+#include "linear_algebra/linear_solver.cuh"
+#include "linear_algebra/sparse_matrix.cuh"
 
 #include "particles/particle_handler_2d.cuh"
 
@@ -125,7 +127,7 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, cons
             if (boundaryID != 1)
                 continue;
 
-            const Point2 normalVec = { 1.0, 0.0 };;
+            const Point2 normalVec = { 1.0, 0.0 };
             const Point2 start = triangleVertices[edge];
             const Point2 end = triangleVertices[(edge + 1) % 3];
 
@@ -278,6 +280,152 @@ __global__ void kFinalizePredictionBC(int n, DirichletNode* targetValues, const 
     if (idx < n)
         targetValues[idx].bcValue = sourceValues[idx].bcValue + simParams.dt / simParams.rho * numerator[idx] / denominator[idx];
 }
+
+__global__ void kCountBodyEdges(int n, int boundaryID, const uint3* cells, const int3* edgeBoundaryIDs, int* boundaryEdgesCount, int2 *boundaryEdges = nullptr)
+{
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < n) {
+        const int3 cellEdgesBoundaryIDs = edgeBoundaryIDs[idx];
+
+        for(int i = 0; i < 3; ++i)
+            if (*(&cellEdgesBoundaryIDs.x + i) == boundaryID){
+                int pos = atomicAdd(boundaryEdgesCount, 1);
+
+                if(boundaryEdges){
+                    int2 cellEdge;
+                    cellEdge.x = idx;
+                    cellEdge.y = i;
+                    boundaryEdges[pos] = cellEdge;
+                }
+
+                return;     //a triangle can not contain 2 boundary edges simultaneously
+            }
+    }
+}
+
+__global__ void kCalculateBodyForces(int n, const Point2 *vertices, const uint3 *cells, Matrix2x2 *invJacobi,
+    const int2 *boundaryCells, double **velocity, double* pressure, double4* loadValues)
+{
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < n) {
+        const int2 cell = boundaryCells[idx];
+
+        const uint3 triangle = cells[cell.x];
+
+        Point2 triangleVertices[3];
+        triangleVertices[0] = vertices[triangle.x];
+        triangleVertices[1] = vertices[triangle.y];
+        triangleVertices[2] = vertices[triangle.z];
+
+        const Matrix2x2 cellInvJacobi = invJacobi[cell.x];
+
+        int edgeVertices[2] = { cell.y, (cell.y + 1) % 3 };
+
+        const Point2 start = triangleVertices[edgeVertices[0]];
+        const Point2 end = triangleVertices[edgeVertices[1]];
+
+        const Point2 center = { 0.2, 0.2 };
+        const Point2 normal = normalize(0.5 * (start + end) - center);
+        const Point2 tangent = { normal.y, -normal.x };
+
+        double4 edgeLoadValues = { 0, 0, 0, 0 };
+
+        for (int qp = 0; qp < edgeQuadraturePointsNum; ++qp) {
+            double qPointPressureValue = 0.0;
+            double qPointDVtDn = 0.0;
+
+            const Point2 quadraturePoint = edgeQuadraturePoint(start, end, edgeQuadratureFormula[qp].coordinate);
+            const Point3 Lcoordinates = GEOMETRY::transformGlobalToLocal(quadraturePoint, cellInvJacobi, triangleVertices[2]);
+
+            for(int i = 0; i < 3; ++i){
+                const double shapeValueI = *(&Lcoordinates.x + i);
+                qPointPressureValue += pressure[*(&triangle.x + i)] * shapeValueI;
+
+                const Point2 velocityI = { velocity[0][*(&triangle.x + i)], velocity[1][*(&triangle.x + i)] };
+                const Point2 shapeGradI = cellInvJacobi * shapeFuncGrad(i);
+                qPointDVtDn += dot(velocityI, tangent) * dot(shapeGradI, normal);
+            }
+
+            const double weight = edgeQuadratureFormula[qp].weight;
+            edgeLoadValues.x -= qPointPressureValue * normal.x * weight;
+            edgeLoadValues.y -= qPointPressureValue * normal.y * weight;
+            edgeLoadValues.z += simParams.mu * qPointDVtDn * tangent.x * weight;
+            edgeLoadValues.w += simParams.mu * qPointDVtDn * tangent.y * weight;
+        }
+
+        loadValues[idx] = edgeLoadValues;
+    }
+}
+
+class boundaryLoadsCalculator
+{
+public:
+    boundaryLoadsCalculator(const Mesh2D& mesh_, SimulationParameters &parameters)
+        : mesh(mesh_)
+        , coeff(2.0 / (parameters.rho * parameters.meanVelocity * parameters.meanVelocity * parameters.thickness))
+    {
+        allocate_device(&boundaryEdgesCount, 1);
+        allocate_device(&totalForces, 1);
+
+        zero_value_device(boundaryEdgesCount, 1);
+        blocks = blocksForSize(mesh.getCells().size);
+        kCountBodyEdges<<<blocks, gpuThreads>>> (mesh.getCells().size, parameters.bodyBoundaryID, mesh.getCells().data, mesh.getEdgeBoundaryIDs().data, boundaryEdgesCount);
+
+        copy_d2h(boundaryEdgesCount, &hostBoundaryEdgesCount, 1);
+        boundaryCells.allocate(hostBoundaryEdgesCount);
+        edgeForces.allocate(hostBoundaryEdgesCount);
+
+        blocks = blocksForSize(hostBoundaryEdgesCount);
+        zero_value_device(boundaryEdgesCount, 1);
+        kCountBodyEdges<<<blocks, gpuThreads>>> (mesh.getCells().size, parameters.bodyBoundaryID, mesh.getCells().data, mesh.getEdgeBoundaryIDs().data, boundaryEdgesCount, boundaryCells.data);
+
+        forcesFile.open("Forces.csv");
+        forcesFile << "Time;Cx;Cy" << std::endl;
+    }
+
+    ~boundaryLoadsCalculator()
+    {
+        free_device(boundaryEdgesCount);
+        free_device(totalForces);
+
+        if(forcesFile.is_open())
+            forcesFile.close();
+    }
+
+    void calculateLoads(double time, const deviceVector<double*> &velocity, const deviceVector<double> &pressure)
+    {
+        edgeForces.clearValues();
+        kCalculateBodyForces<<<blocks, gpuThreads>>>(hostBoundaryEdgesCount, mesh.getVertices().data, mesh.getCells().data, mesh.getInvJacobi().data,
+            boundaryCells.data, velocity.data, pressure.data, edgeForces.data);
+
+        zero_value_device(totalForces, 1);
+        reduceVector<gpuThreads, double, 4><<<blocks, gpuThreads>>>(hostBoundaryEdgesCount, (double*)edgeForces.data, (double*)totalForces);
+
+        copy_d2h(totalForces, &hostTotalForces, 1);
+        double cx, cy;
+        cx = (hostTotalForces.x + hostTotalForces.z) * coeff;
+        cy = (hostTotalForces.y + hostTotalForces.w) * coeff;
+        forcesFile << time << ";" << cx << ";" << cy << std::endl;
+    }
+
+private:
+    deviceVector<int2> boundaryCells;   //index of the triangle is stored together with the index of the boundary edge
+    deviceVector<double4> edgeForces;
+    double4 *totalForces;
+    double4 hostTotalForces;
+    
+    int* boundaryEdgesCount;
+    int hostBoundaryEdgesCount;
+    unsigned int blocks;
+
+    const Mesh2D& mesh;
+
+    const double coeff;
+
+    std::ofstream forcesFile;
+};
 
 class VelocityDirichletBCs : public DirichletBCs
 {
@@ -545,8 +693,11 @@ int main(int argc, char *argv[]){
     hostParams.dt = 0.001;
     hostParams.mu = 0.001;
     hostParams.tFinal = 7.5;
-    hostParams.outputFrequency = 500;
+    hostParams.outputFrequency = 100;
     hostParams.exportParticles = 0;
+    hostParams.calculateLoads = 1;
+    hostParams.bodyBoundaryID = 3;
+    hostParams.thickness = 0.1;
     copy_h2const(&hostParams, &simParams, 1);
 
     //matrices, solution and right-hand-side vectors for both component of velocity field (prediction and final ones) and pressure
@@ -589,11 +740,13 @@ int main(int argc, char *argv[]){
 
     particleHandler.initParticleVelocity(integrator.getVelocitySolution());
 
-    SolverCG cgSolver(hostParams.tolerance, hostParams.maxIterations);
-    cgSolver.init(pressureMatrix, true);
+    LinearAlgebra LA;
+    PreconditionerJacobi precond(problemSize, &LA);
+    SolverCG cgSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &precond);
+    cgSolver.init(pressureMatrix);
 
-    SolverGMRES gmresSolver(hostParams.tolerance, hostParams.maxIterations);
-    gmresSolver.init(velocityCorrectionMatrix[0], true);
+    SolverGMRES gmresSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &precond);
+    gmresSolver.init(velocityCorrectionMatrix[0]);
 
     DataExport dataExport(mesh, &particleHandler);
     dataExport.addScalarDataVector(velocitySolution[0], "velX");
@@ -605,6 +758,8 @@ int main(int argc, char *argv[]){
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");
     if (hostParams.exportParticles)
         dataExport.exportParticlesToVTK("particles" + Utilities::intToString(0) + ".vtu");
+
+    boundaryLoadsCalculator blCalc(mesh, hostParams);
 
     timer.start();
 
@@ -688,6 +843,10 @@ int main(int argc, char *argv[]){
             if(hostParams.exportParticles)
                 dataExport.exportParticlesToVTK("particles" + Utilities::intToString(step_number) + ".vtu");
         }
+
+        pScope.start("Calculation of body loads");
+        blCalc.calculateLoads(t, integrator.getVelocitySolution(), pressureSolution);
+        pScope.stop();
 
         float2 times = timer.stop();
         printf("Time of a simulation step: %6.3f ms, total time since start: %6.3f s\n", times.x, 0.001f * times.y);
