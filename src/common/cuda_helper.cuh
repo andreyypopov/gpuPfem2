@@ -128,7 +128,7 @@ __global__ void reduceVector(int n, const T *vector, T *res)
     for(int k = 0; k < numValues; ++k)
         sharedData[numValues * lIdx + k] = 0;
     unsigned int i = lIdx;
-    while(i < n / numValues){
+    while(i < n){
         for(int k = 0; k < numValues; ++k)
             sharedData[numValues * lIdx + k] += vector[numValues * i + k];
         i += blockSize;

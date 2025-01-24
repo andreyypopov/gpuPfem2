@@ -130,12 +130,13 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, cons
             const Point2 normalVec = { 1.0, 0.0 };
             const Point2 start = triangleVertices[edge];
             const Point2 end = triangleVertices[(edge + 1) % 3];
+            const double halfLength = 0.5 * GEOMETRY::distance(start, end);
 
             for (int qp = 0; qp < edgeQuadraturePointsNum; ++qp) {
                 const Point2 quadraturePoint = edgeQuadraturePoint(start, end, edgeQuadratureFormula[qp].coordinate);
                 const Point3 Lcoordinates = GEOMETRY::transformGlobalToLocal(quadraturePoint, cellInvJacobi, triangleVertices[2]);
 
-                aux = simParams.mu * simParams.dt * edgeQuadratureFormula[qp].weight;
+                aux = simParams.mu * simParams.dt * edgeQuadratureFormula[qp].weight * halfLength;
 
                 for (int i = 0; i < 3; ++i) {
                     const double shapeValueI = *(&Lcoordinates.x + i);
@@ -328,6 +329,7 @@ __global__ void kCalculateBodyForces(int n, const Point2 *vertices, const uint3 
 
         const Point2 center = { 0.2, 0.2 };
         const Point2 normal = normalize(0.5 * (start + end) - center);
+        const double halfLength = 0.5 * GEOMETRY::distance(start, end);
         const Point2 tangent = { normal.y, -normal.x };
 
         double4 edgeLoadValues = { 0, 0, 0, 0 };
@@ -348,7 +350,7 @@ __global__ void kCalculateBodyForces(int n, const Point2 *vertices, const uint3 
                 qPointDVtDn += dot(velocityI, tangent) * dot(shapeGradI, normal);
             }
 
-            const double weight = edgeQuadratureFormula[qp].weight;
+            const double weight = edgeQuadratureFormula[qp].weight * halfLength;
             edgeLoadValues.x -= qPointPressureValue * normal.x * weight;
             edgeLoadValues.y -= qPointPressureValue * normal.y * weight;
             edgeLoadValues.z += simParams.mu * qPointDVtDn * tangent.x * weight;
@@ -377,9 +379,10 @@ public:
         boundaryCells.allocate(hostBoundaryEdgesCount);
         edgeForces.allocate(hostBoundaryEdgesCount);
 
-        blocks = blocksForSize(hostBoundaryEdgesCount);
         zero_value_device(boundaryEdgesCount, 1);
         kCountBodyEdges<<<blocks, gpuThreads>>> (mesh.getCells().size, parameters.bodyBoundaryID, mesh.getCells().data, mesh.getEdgeBoundaryIDs().data, boundaryEdgesCount, boundaryCells.data);
+
+        blocks = blocksForSize(hostBoundaryEdgesCount);
 
         forcesFile.open("Forces.csv");
         forcesFile << "Time;Cx;Cy" << std::endl;
@@ -401,7 +404,7 @@ public:
             boundaryCells.data, velocity.data, pressure.data, edgeForces.data);
 
         zero_value_device(totalForces, 1);
-        reduceVector<gpuThreads, double, 4><<<blocks, gpuThreads>>>(hostBoundaryEdgesCount, (double*)edgeForces.data, (double*)totalForces);
+        reduceVector<gpuThreads, double, 4><<<1, gpuThreads>>>(hostBoundaryEdgesCount, (double*)edgeForces.data, (double*)totalForces);
 
         copy_d2h(totalForces, &hostTotalForces, 1);
         double cx, cy;
