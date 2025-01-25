@@ -211,7 +211,9 @@ void SolverCG::init(const SparseMatrixCSR &matrix){
 
     const size_t bufferSize = LA->sparseMV_bufferSize(matA, vecX, vecY, &aSpmv, &bSpmv);
     checkCudaErrors(cudaMalloc(&dBuffer, bufferSize));
+#if (CUDART_VERSION >= 12040)
     LA->sparseMV_preprocess(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
+#endif
 }
 
 bool SolverCG::solveChronopolousGear(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b)
@@ -411,7 +413,9 @@ void SolverGMRES::init(const SparseMatrixCSR &matrix)
 
     const size_t bufferSize = LA->sparseMV_bufferSize(matA, vecX, vecY, &aSpmv, &bSpmv);
     checkCudaErrors(cudaMalloc(&dBuffer, bufferSize));
+#if (CUDART_VERSION >= 12040)
     LA->sparseMV_preprocess(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
+#endif
 }
 
 bool SolverGMRES::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const deviceVector<double> &b)
