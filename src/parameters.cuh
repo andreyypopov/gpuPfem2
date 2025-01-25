@@ -17,8 +17,14 @@ struct SimulationParameters
     const char* meshFileName;       //!< File name of the input mesh file
     int outputFrequency;            //!< Output data each N frames
     
-    int particleAdvectionSubsteps;//!< Number of substeps for particle advection within 1 simulation step
+    int particleAdvectionSubsteps;  //!< Number of substeps for particle advection within 1 simulation step
     int exportParticles;            //!< Export particles to VTK (boolean flag)
+
+    //loads calculation
+    int calculateLoads;             //!< Whether or not loads should be calculated on the body surface
+    int bodyBoundaryID;             //!< ID of the boundary edges to be used for forces calculation on the body surface
+    double thickness;               //!< Body thickness is the z direction
+    double meanVelocity;            //!< Mean flow velocity
 
     void setDefaultParameters(){
         rho = 1.0;
@@ -34,6 +40,11 @@ struct SimulationParameters
         meshFileName = "";
         outputFrequency = 1;
         exportParticles = 0;
+
+        calculateLoads = 0;
+        bodyBoundaryID = -1;
+        thickness = 1.0;
+        meanVelocity = 1.0;
     }
 };
 

@@ -17,6 +17,7 @@ Solution of the 2D problem using PFEM-2. The whole pipeline, including both part
 9. Solution of the linear system using PCG or GMRES with or without a preconditioner (Jacobi, Incomplete LU/Cholesky decomposition)
 10. Correction of particle velocity
 11. Export of results to a VTK (XML-type) file
+12. Calculation of aerodynamic loads and coefficients (drag and lift force) on bodies
 
 ## Prerequisites
 
@@ -30,3 +31,4 @@ Solution of the 2D problem using PFEM-2. The whole pipeline, including both part
 1. Poisson equation in a rectangular domain
 2. Creeping flow (without convective term) in a channel (Poiseuille flow) with partitioned approached (3 equations: velocity prediction equation, Poisson equation for pressure, velocity correction equation).
 3. Poiseuille flow in a channel
+4. Flow past a cylinder in a channel (test 2D-2 from _Schäfer M., Turek S., Durst F., Krause E., Rannacher R. (1996). Benchmark Computations of Laminar Flow Around a Cylinder_)
