@@ -623,7 +623,7 @@ int main(int argc, char *argv[]){
     pScope.start("Mesh import");
 
     Mesh2D mesh;
-    if(!mesh.loadMeshFromFile("../CylinderMesh.dat"))
+    if(!mesh.loadMeshFromFile("../CylinderMesh3.dat"))
         return EXIT_FAILURE;
 
     unsigned int blocks = blocksForSize(mesh.getCells().size);
@@ -696,7 +696,7 @@ int main(int argc, char *argv[]){
     hostParams.dt = 0.001;
     hostParams.mu = 0.001;
     hostParams.tFinal = 7.5;
-    hostParams.outputFrequency = 100;
+    hostParams.outputFrequency = 500;
     hostParams.exportParticles = 0;
     hostParams.calculateLoads = 1;
     hostParams.bodyBoundaryID = 3;
