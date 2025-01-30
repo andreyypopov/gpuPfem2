@@ -710,6 +710,7 @@ int main(int argc, char *argv[]){
     hostParams.setDefaultParameters();
     hostParams.dt = 0.001;
     hostParams.mu = 0.001;
+    hostParams.simulationScheme = 0;
     hostParams.tFinal = 7.5;
     hostParams.outputFrequency = 500;
     hostParams.exportParticles = 0;
