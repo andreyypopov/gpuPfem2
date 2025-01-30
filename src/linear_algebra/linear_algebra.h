@@ -53,7 +53,7 @@ public:
         checkCublasErrors(cublasDgemv(cublasHandle, CUBLAS_OP_N, m, n, alpha, matrix, lda, vec, 1, beta, res, 1));
     }
 
-    size_t sparseMV_bufferSize(const cusparseConstSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
+    size_t sparseMV_bufferSize(const cusparseSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
         const double *alpha, const double *beta) const
     {
         size_t res;
@@ -63,14 +63,16 @@ public:
         return res;
     }
 
-    void sparseMV_preprocess(const cusparseConstSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
+#if (CUDART_VERSION >= 12040)
+    void sparseMV_preprocess(const cusparseSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
         const double *alpha, const double *beta, void *buffer) const
     {
         checkCusparseErrors(cusparseSpMV_preprocess(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, alpha, matrix, vec,
             beta, result, CUDA_R_64F, CUSPARSE_SPMV_CSR_ALG1, buffer));
     }
+#endif
 
-    void sparseMV(const cusparseConstSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
+    void sparseMV(const cusparseSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
         const double *alpha, const double *beta, void *buffer) const
     {
         checkCusparseErrors(cusparseSpMV(cusparseHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, alpha, matrix, vec,
@@ -111,7 +113,7 @@ public:
         checkCusparseErrors(cusparseDcsric02(cusparseHandle, n, nnz, matrix, matrixValues, rowOffset, colIndices, icInfo, CUSPARSE_SOLVE_POLICY_NO_LEVEL, buffer));
     }
 
-    size_t solveSparseTriangularSystem_bufferSize(const cusparseConstSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
+    size_t solveSparseTriangularSystem_bufferSize(const cusparseSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
         const double *alpha, const cusparseSpSVDescr_t &spsvDescription, bool transposed = false) const
     {
         size_t res;
@@ -122,7 +124,7 @@ public:
         return res;
     }
 
-    void solveSparseTriangularSystem_analysis(const cusparseConstSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
+    void solveSparseTriangularSystem_analysis(const cusparseSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
         const double *alpha, const cusparseSpSVDescr_t &spsvDescription, void *buffer, bool transposed = false) const
     {
         const cusparseOperation_t operation = transposed ? CUSPARSE_OPERATION_TRANSPOSE : CUSPARSE_OPERATION_NON_TRANSPOSE;
@@ -130,7 +132,7 @@ public:
             matrix, vec, result, CUDA_R_64F, CUSPARSE_SPSV_ALG_DEFAULT, spsvDescription, buffer));
     }
 
-    void solveSparseTriangularSystem(const cusparseConstSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
+    void solveSparseTriangularSystem(const cusparseSpMatDescr_t &matrix, const cusparseDnVecDescr_t &vec, const cusparseDnVecDescr_t &result,
         const double *alpha, const cusparseSpSVDescr_t &spsvDescription, bool transposed = false) const
     {
         const cusparseOperation_t operation = transposed ? CUSPARSE_OPERATION_TRANSPOSE : CUSPARSE_OPERATION_NON_TRANSPOSE;
