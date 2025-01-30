@@ -70,7 +70,7 @@ __global__ void kSetEdgeBoundaryIDs(int n, const Point2 *vertices, const uint3 *
 
 __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, const uint3 *cells, double *areas, Matrix2x2 *invJacobi,
     const int3 *edgeBoundaryIDs, double **velocity, double** velocityOld,
-    const int **rowOffset, const int **colIndices, double **matrixValues, double **rhsVector)
+    const int **rowOffset, const int **colIndices, double **matrixValues, double **rhsVector, double *pressureOld = nullptr)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -116,6 +116,12 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, cons
 
                     localRhs[0](i) -= aux * (shapeGradI.y * shapeGradJ.x - 2.0 / 3.0 * shapeGradI.x * shapeGradJ.y) * velocity[1][*(&triangle.x + j)];
                     localRhs[1](i) -= aux * (shapeGradI.x * shapeGradJ.y - 2.0 / 3.0 * shapeGradI.y * shapeGradJ.x) * velocity[0][*(&triangle.x + j)];
+
+                    if (pressureOld) {
+                        aux = shapeValueI * pressureOld[*(&triangle.x + j)] * simParams.dt * faceQuadratureFormula[qp].weight;
+                        localRhs[0](i) -= aux * shapeGradJ.x;
+                        localRhs[1](i) -= aux * shapeGradJ.y;
+                    }
                 }
             }
         }
@@ -160,7 +166,7 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, cons
 }
 
 __global__ void kIntegratePressureEquation(int n, const Point2* vertices, const uint3* cells, double* areas, Matrix2x2* invJacobi,
-    double** velocityPrediction, const int* rowOffset, const int* colIndices, double* matrixValues, double* rhsVector)
+    double** velocityPrediction, const int* rowOffset, const int* colIndices, double* matrixValues, double* rhsVector, double* pressureOld = nullptr)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -173,7 +179,7 @@ __global__ void kIntegratePressureEquation(int n, const Point2* vertices, const 
         GenericMatrix3x3 localMatrix;
         Vector3 localRhs;
 
-        double aux;
+        double aux, aux2;
 
         //integral over cell
         for (int qp = 0; qp < faceQuadraturePointsNum; ++qp) {
@@ -190,7 +196,10 @@ __global__ void kIntegratePressureEquation(int n, const Point2* vertices, const 
 
                     const Point2 velPredictionJ = { velocityPrediction[0][*(&triangle.x + j)], velocityPrediction[1][*(&triangle.x + j)] };
 
-                    localMatrix(i, j) += dot(shapeGradI, shapeGradJ) * faceQuadratureFormula[qp].weight;
+                    aux2 = dot(shapeGradI, shapeGradJ) * faceQuadratureFormula[qp].weight;
+                    localMatrix(i, j) += aux2;
+                    if(pressureOld)
+                        localRhs(i) += aux2 * pressureOld[*(&triangle.x + j)];
                     localRhs(i) += aux * dot(shapeGradJ, velPredictionJ);
                 }
             }
@@ -201,7 +210,8 @@ __global__ void kIntegratePressureEquation(int n, const Point2* vertices, const 
 }
 
 __global__ void kIntegrateVelocityCorrection(int n, const Point2* vertices, const uint3* cells, double* areas, Matrix2x2* invJacobi,
-    double** velocityPrediction, double* pressure, const int** rowOffset, const int** colIndices, double** matrixValues, double** rhsVector)
+    double** velocityPrediction, double* pressure, const int** rowOffset, const int** colIndices, double** matrixValues, double** rhsVector,
+    double* pressureOld = nullptr)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -214,7 +224,7 @@ __global__ void kIntegrateVelocityCorrection(int n, const Point2* vertices, cons
         GenericMatrix3x3 localMatrix[2];
         Vector3 localRhs[2];
 
-        double aux, aux2;
+        double aux, aux2, pressureValue;
 
         //integral over cell
         for (int qp = 0; qp < faceQuadraturePointsNum; ++qp) {
@@ -230,10 +240,13 @@ __global__ void kIntegrateVelocityCorrection(int n, const Point2* vertices, cons
                     const double shapeValueJ = *(&Lcoordinates.x + j);
 
                     aux = simParams.rho * shapeValueI * shapeValueJ * faceQuadratureFormula[qp].weight;
+                    pressureValue = pressure[*(&triangle.x + j)];
+                    if(pressureOld)
+                        pressureValue -= pressureOld[*(&triangle.x + j)];
 
                     for (int k = 0; k < 2; ++k) {
                         localMatrix[k](i, j) += aux;
-                        localRhs[k](i) += aux * velocityPrediction[k][*(&triangle.x + j)] - aux2 * *(&shapeGradJ.x + k) * pressure[*(&triangle.x + j)];
+                        localRhs[k](i) += aux * velocityPrediction[k][*(&triangle.x + j)] - aux2 * *(&shapeGradJ.x + k) * pressureValue;
                     }
                 }
             }
@@ -245,7 +258,7 @@ __global__ void kIntegrateVelocityCorrection(int n, const Point2* vertices, cons
 }
 
 __global__ void kAccumulatePressureGradient(int n, const uint3* cells, double* areas, Matrix2x2* invJacobi,
-    double* pressure, const int* DirichletNodesMap, double *numerator, double *denominator, int component)
+    double* pressure, const int* DirichletNodesMap, double *numerator, double *denominator, int component, double* pressureOld = nullptr)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -260,7 +273,7 @@ __global__ void kAccumulatePressureGradient(int n, const uint3* cells, double* a
 
         Point2 cellGradient = { 0.0, 0.0 };
         for (int i = 0; i < 3; ++i)
-            cellGradient += pressure[*(&triangle.x + i)] * shapeFuncGrad(i);
+            cellGradient += (pressure[*(&triangle.x + i)] - (pressureOld ? pressureOld[*(&triangle.x + i)] : 0.0)) * shapeFuncGrad(i);
 
         cellGradient = cellInvJacobi * cellGradient;
 
@@ -442,7 +455,7 @@ public:
         denominator.allocate(DirichletValues.size);
     }
 
-    void setDirichletValues(const DirichletBCs &VelocityBC, const deviceVector<double> &pressure, int component);
+    void setDirichletValues(const DirichletBCs &VelocityBC, const deviceVector<double> &pressure, const deviceVector<double>& pressureOld, int component);
 
 private:
     const Mesh2D *mesh = nullptr;
@@ -450,14 +463,14 @@ private:
     deviceVector<double> numerator, denominator;
 };
 
-void VelocityDirichletBCs::setDirichletValues(const DirichletBCs& VelocityBC, const deviceVector<double>& pressure, int component)
+void VelocityDirichletBCs::setDirichletValues(const DirichletBCs& VelocityBC, const deviceVector<double>& pressure, const deviceVector<double>& pressureOld, int component)
 {
     numerator.clearValues();
     denominator.clearValues();
 
     unsigned int blocks = blocksForSize(mesh->getCells().size);
     kAccumulatePressureGradient<<<blocks, gpuThreads>>>(mesh->getCells().size, mesh->getCells().data, mesh->getCellArea().data, mesh->getInvJacobi().data,
-        pressure.data, nodesToDirichletNodes.data, numerator.data, denominator.data, component);
+        pressure.data, nodesToDirichletNodes.data, numerator.data, denominator.data, component, pressureOld.data);
 
     blocks = blocksForSize(DirichletValues.size);
     kFinalizePredictionBC<<<blocks, gpuThreads>>> (DirichletValues.size, DirichletValues.data, VelocityBC.getDirichletValues(),
@@ -486,7 +499,7 @@ public:
     void setupVelocityPrediction(std::array<SparseMatrixCSR, 2>& csrMatrix, std::array<deviceVector<double>, 2>& rhsVector,
         const std::array<deviceVector<double>, 2>& velocity);
 
-    void setupPressure(SparseMatrixCSR& csrMatrix, deviceVector<double>& rhsVector, deviceVector<double>& solution);
+    void setupPressure(SparseMatrixCSR& csrMatrix, deviceVector<double>& rhsVector, deviceVector<double>& solution, deviceVector<double>& solutionOld);
 
     void setupVelocityCorrection(std::array<SparseMatrixCSR, 2>& csrMatrix, std::array<deviceVector<double>, 2>& rhsVector,
         const std::array<deviceVector<double>, 2>& velocity, const std::array<deviceVector<double>, 2>& velocityOld);
@@ -503,6 +516,7 @@ private:
     deviceVector<double*> velocitySolutionOld;
     deviceVector<double*> velocityPrediction;
     double* pressure;
+    double* pressureOld;
 
     deviceVector<double*> velocityPredictionRhs;
     deviceVector<double*> velocityCorrectionRhs;
@@ -550,9 +564,10 @@ void CylinderIntegrator::setupVelocityPrediction(std::array<SparseMatrixCSR, 2>&
     copy_h2d(matrixValues, velocityPredictionMatrixValues.data, 2);
 }
 
-void CylinderIntegrator::setupPressure(SparseMatrixCSR& csrMatrix, deviceVector<double>& rhsVector, deviceVector<double>& solution)
+void CylinderIntegrator::setupPressure(SparseMatrixCSR& csrMatrix, deviceVector<double>& rhsVector, deviceVector<double>& solution, deviceVector<double>& solutionOld)
 {
     pressure = solution.data;
+    pressureOld = solutionOld.data;
     pressureRhs = rhsVector.data;
     pressureRowOffset = csrMatrix.getRowOffset();
     pressureColIndices = csrMatrix.getColIndices();
@@ -598,14 +613,14 @@ void CylinderIntegrator::assembleVelocityPrediction()
     unsigned int blocks = blocksForSize(mesh.getCells().size);
     kIntegrateVelocityPrediction<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, mesh.getCellArea().data, mesh.getInvJacobi().data,
         mesh.getEdgeBoundaryIDs().data, velocitySolution.data, velocitySolutionOld.data, velocityPredictionRowOffset.data,
-        velocityPredictionColIndices.data, velocityPredictionMatrixValues.data, velocityPredictionRhs.data);
+        velocityPredictionColIndices.data, velocityPredictionMatrixValues.data, velocityPredictionRhs.data, pressureOld);
 }
 
 void CylinderIntegrator::assemblePressureEquation()
 {
     unsigned int blocks = blocksForSize(mesh.getCells().size);
     kIntegratePressureEquation<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, mesh.getCellArea().data, mesh.getInvJacobi().data,
-        velocityPrediction.data, pressureRowOffset, pressureColIndices, pressureMatrixValues, pressureRhs);
+        velocityPrediction.data, pressureRowOffset, pressureColIndices, pressureMatrixValues, pressureRhs, pressureOld);
 }
 
 void CylinderIntegrator::assembleVelocityCorrection()
@@ -613,7 +628,7 @@ void CylinderIntegrator::assembleVelocityCorrection()
     unsigned int blocks = blocksForSize(mesh.getCells().size);
     kIntegrateVelocityCorrection<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, mesh.getCellArea().data, mesh.getInvJacobi().data,
         velocityPrediction.data, pressure, velocityCorrectionRowOffset.data, velocityCorrectionColIndices.data,
-        velocityCorrectionMatrixValues.data, velocityCorrectionRhs.data);
+        velocityCorrectionMatrixValues.data, velocityCorrectionRhs.data, pressureOld);
 }
 
 int main(int argc, char *argv[]){
@@ -712,6 +727,7 @@ int main(int argc, char *argv[]){
     std::array<deviceVector<double>, 2> velocitySolutionOld;
 	std::array<deviceVector<double>, 2> velocityPrediction;
 	deviceVector<double> pressureSolution;
+    deviceVector<double> pressureSolutionOld;
 
     std::array<deviceVector<double>, 2> velocityCorrectionRhs;
     std::array<deviceVector<double>, 2> velocityPredictionRhs;
@@ -727,6 +743,8 @@ int main(int argc, char *argv[]){
         velocityPredictionRhs[i].allocate(problemSize);
 	}
     pressureSolution.allocate(problemSize);
+    if(hostParams.simulationScheme == 1)
+        pressureSolutionOld.allocate(problemSize);
     pressureRhs.allocate(problemSize);
 
     //initial solution
@@ -735,10 +753,12 @@ int main(int argc, char *argv[]){
         velocityPrediction[i].clearValues();
     }
     pressureSolution.clearValues();
+    if (hostParams.simulationScheme == 1)
+        pressureSolutionOld.clearValues();
 
     CylinderIntegrator integrator(mesh);
     integrator.setupVelocityPrediction(velocityPredictionMatrix, velocityPredictionRhs, velocityPrediction);
-    integrator.setupPressure(pressureMatrix, pressureRhs, pressureSolution);
+    integrator.setupPressure(pressureMatrix, pressureRhs, pressureSolution, pressureSolutionOld);
     integrator.setupVelocityCorrection(velocityCorrectionMatrix, velocityCorrectionRhs, velocitySolution, velocitySolutionOld);
 
     particleHandler.initParticleVelocity(integrator.getVelocitySolution());
@@ -782,6 +802,8 @@ int main(int argc, char *argv[]){
 
         for(int i = 0; i < 2; ++i)
             copy_d2d(velocitySolution[i].data, velocitySolutionOld[i].data, problemSize);
+        if(hostParams.simulationScheme == 1)
+            copy_d2d(pressureSolution.data, pressureSolutionOld.data, problemSize);
 
         for (int nOuterIter = 0; nOuterIter < 2; ++nOuterIter) {
             //assemble and solve velocity prediction equations
@@ -796,7 +818,7 @@ int main(int argc, char *argv[]){
             pScope.stop();
             pScope.start("Linear solver");
             for (int i = 0; i < 2; ++i) {
-                velocityPredictionBCs[i].setDirichletValues(velocityBCs[i], pressureSolution, i);
+                velocityPredictionBCs[i].setDirichletValues(velocityBCs[i], pressureSolution, pressureSolutionOld, i);
                 velocityPredictionBCs[i].applyBCs(velocityPredictionMatrix[i], velocityPredictionRhs[i]);
                 gmresSolver.solve(velocityPredictionMatrix[i], velocityPrediction[i], velocityPredictionRhs[i]);
             }
