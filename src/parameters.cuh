@@ -13,6 +13,7 @@ struct SimulationParameters
 
     double tolerance;               //!< Linear solver tolerance
     int maxIterations;              //!< Maximum number of iterations of the linear solver
+    int simulationScheme;           //!< Generally refers to Scheme A and Scheme B in pressure accounting
 
     const char* meshFileName;       //!< File name of the input mesh file
     int outputFrequency;            //!< Output data each N frames
@@ -36,6 +37,7 @@ struct SimulationParameters
 
         tolerance = 1e-8;
         maxIterations = 1000;
+        simulationScheme = 0;
 
         meshFileName = "";
         outputFrequency = 1;
