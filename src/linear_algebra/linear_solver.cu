@@ -110,14 +110,15 @@ __global__ void initCoefficients(double *alpha, double *beta, const double *gamm
     *beta = 0;
 }
 
-LinearSolver::LinearSolver(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_)
+LinearSolver::LinearSolver(SimulationParameters parameters, const LinearAlgebra *LA_, Preconditioner *precond_)
     : LA(LA_)
     , aSpmv(1.0)
     , bSpmv(0.0)
     , precond(precond_)
-    , tolerance(tolerance)
+    , tolerance(parameters.tolerance)
     , tolerance_squared(tolerance * tolerance)
-    , maxIterations(max_iterations)
+    , maxIterations(parameters.maxIterations)
+    , restartFrequency(parameters.restartFrequency)
 {
 }
 
@@ -153,8 +154,8 @@ bool LinearSolver::solve(const SparseMatrixCSR &A, deviceVector<double> &x, cons
     return true;
 }
 
-SolverCG::SolverCG(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_)
-    : LinearSolver(tolerance, max_iterations, LA_, precond_)
+SolverCG::SolverCG(SimulationParameters parameters, const LinearAlgebra *LA_, Preconditioner *precond_)
+    : LinearSolver(parameters, LA_, precond_)
 {
 }
 
@@ -365,6 +366,22 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
 
         //update the p_i vector
         updateP<<<gpuBlocks, gpuThreads>>>(n, pk.data, v, gamma_kp, gamma_k);
+
+        if(restartFrequency && (it % restartFrequency == 0)){
+            checkCusparseErrors(cusparseDnVecGetValues(vecX, &vecPointer));
+
+            //temporarily set the vector in SpMV to x
+            checkCusparseErrors(cusparseDnVecSetValues(vecX, x.data));
+
+            //calculate A*x
+            LA->sparseMV(matA, vecX, vecY, &aSpmv, &bSpmv, dBuffer);
+
+            //r = b - A*x
+            subtractVectors<<<gpuBlocks, gpuThreads>>>(n, rk.data, b.data, Apk.data);
+
+            //set pointer of the vector in SpMV back to normal
+            checkCusparseErrors(cusparseDnVecSetValues(vecX, vecPointer));
+        }
     }
     
     if(converged)
@@ -375,8 +392,8 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
     return converged;
 }
 
-SolverGMRES::SolverGMRES(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_)
-    : LinearSolver(tolerance, max_iterations, LA_, precond_)
+SolverGMRES::SolverGMRES(SimulationParameters parameters, const LinearAlgebra *LA_, Preconditioner *precond_)
+    : LinearSolver(parameters, LA_, precond_)
 {
     allocate_device(&aux, 1);
     allocate_device(&d_abSpmv, 1);

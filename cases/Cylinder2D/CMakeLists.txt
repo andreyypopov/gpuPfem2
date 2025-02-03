@@ -21,7 +21,7 @@ setup_cuda(${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE "${GPUPFEM2LIB_DIR}/include")
 target_link_directories(${PROJECT_NAME} PRIVATE "${GPUPFEM2LIB_DIR}/lib")
-target_link_libraries(${PROJECT_NAME} PRIVATE gpuFemLib)
+target_link_libraries(${PROJECT_NAME} PRIVATE gpuPfem2Lib)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_WITH_INSTALL_RPATH FALSE)
 set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH "${GPUPFEM2LIB_DIR}/lib")

@@ -2,6 +2,7 @@
 #define linear_solver_cuh
 
 #include "../common/device_vector.cuh"
+#include "../parameters.cuh"
 #include "linear_algebra.h"
 #include "preconditioners.cuh"
 #include "sparse_matrix.cuh"
@@ -15,7 +16,7 @@
 class LinearSolver
 {
 public:
-    LinearSolver(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_ = nullptr);
+    LinearSolver(SimulationParameters parameters, const LinearAlgebra *LA_, Preconditioner *precond_ = nullptr);
     virtual ~LinearSolver();
 
     virtual void init(const SparseMatrixCSR& matrix);
@@ -38,6 +39,7 @@ protected:
     double tolerance;
     double tolerance_squared;
     int maxIterations;
+    int restartFrequency;
 
     int n;
     int nnz;
@@ -60,7 +62,7 @@ protected:
 class SolverCG : public LinearSolver
 {
 public:
-    SolverCG(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_ = nullptr);
+    SolverCG(SimulationParameters parameters, const LinearAlgebra *LA_, Preconditioner *precond_ = nullptr);
     virtual ~SolverCG();
     
     virtual void init(const SparseMatrixCSR &matrix) override;
@@ -98,7 +100,7 @@ private:
 class SolverGMRES : public LinearSolver
 {
 public:
-    SolverGMRES(double tolerance, int max_iterations, const LinearAlgebra *LA_, Preconditioner *precond_ = nullptr);
+    SolverGMRES(SimulationParameters parameters, const LinearAlgebra *LA_, Preconditioner *precond_ = nullptr);
     virtual ~SolverGMRES();
 
     virtual void init(const SparseMatrixCSR &matrix) override;
