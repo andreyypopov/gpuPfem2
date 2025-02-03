@@ -76,12 +76,12 @@ __global__ void updateXR(int n, double *x, double *r, const double *p, const dou
     r[row] -= alpha * Ap[row];
 }
 
-__global__ void updateP(int n, double *p, const double *v, const double *numerator, const double *denominator){
+__global__ void updateP(int n, double *p, const double *v, const double *numerator, const double *denominator, const double *numerator2 = nullptr){
     unsigned int row = blockDim.x * blockIdx.x + threadIdx.x;
     if (row >= n)
         return;
 
-    const double beta = *numerator / *denominator;
+    const double beta = (*numerator - (numerator2 ? *numerator2 : 0.0)) / *denominator;
 
     p[row] = v[row] + beta * p[row];
 }
@@ -156,6 +156,7 @@ bool LinearSolver::solve(const SparseMatrixCSR &A, deviceVector<double> &x, cons
 
 SolverCG::SolverCG(SimulationParameters parameters, const LinearAlgebra *LA_, Preconditioner *precond_)
     : LinearSolver(parameters, LA_, precond_)
+    , usePolakRibiereFormula(parameters.usePolakRibiereFormula)
 {
 }
 
@@ -169,6 +170,7 @@ SolverCG::~SolverCG(){
 
     free_device(gamma_kp);
     free_device(gamma_k);
+    free_device(gamma_km);
 }
 
 void SolverCG::init(const SparseMatrixCSR &matrix){
@@ -178,8 +180,11 @@ void SolverCG::init(const SparseMatrixCSR &matrix){
     if(precond){
         if(ChronopolousGear)
             uk.allocate(n);
-        else
+        else {
             zk.allocate(n);
+            if(usePolakRibiereFormula)
+                zkm.allocate(n);
+        }
     }
     
     if (ChronopolousGear) {
@@ -194,8 +199,11 @@ void SolverCG::init(const SparseMatrixCSR &matrix){
         allocate_device(&alpha_k, 1);
         allocate_device(&beta_k, 1);
         allocate_device(&delta_k, 1);
-    } else
+    } else {
         allocate_device(&pkApk, 1);
+        if(usePolakRibiereFormula)
+            allocate_device(&gamma_km, 1);
+    }
 
     allocate_device(&gamma_kp, 1);
     allocate_device(&gamma_k, 1);
@@ -352,8 +360,11 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
         updateXR<<<gpuBlocks, gpuThreads>>>(n, x.data, rk.data, pk.data, Apk.data, gamma_kp, pkApk);
 
         //z_i = M^(-1)*r_i
-        if(precond)
+        if(precond){
+            if(usePolakRibiereFormula)
+                zk.swap(zkm);
             precond->applyPreconditioner(zk.data, rk.data);
+        }
 
         std::swap(gamma_kp, gamma_k);
         //gamma_i = (r_i, z_i)
@@ -364,8 +375,11 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
             break;
         }
 
+        if(usePolakRibiereFormula)
+            LA->dot(rk.data, zkm.data, gamma_km, n);
+
         //update the p_i vector
-        updateP<<<gpuBlocks, gpuThreads>>>(n, pk.data, v, gamma_kp, gamma_k);
+        updateP<<<gpuBlocks, gpuThreads>>>(n, pk.data, v, gamma_kp, gamma_k, gamma_km);
 
         if(restartFrequency && (it % restartFrequency == 0)){
             checkCusparseErrors(cusparseDnVecGetValues(vecX, &vecPointer));

@@ -80,6 +80,7 @@ private:
     deviceVector<double> sk;
     deviceVector<double> Apk;
     deviceVector<double> zk;
+    deviceVector<double> zkm;
 
     //CG coefficients/scalars
     double *alpha_k;
@@ -87,8 +88,10 @@ private:
     double *gamma_kp, *gamma_k;
     double *delta_k;
     double *pkApk;
+    double *gamma_km = nullptr;
 
     const bool ChronopolousGear = false;
+    const bool usePolakRibiereFormula = false;
 };
 
 // CUDA implementation of the GMRES solver
