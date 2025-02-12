@@ -361,8 +361,10 @@ bool SolverCG::solve(const SparseMatrixCSR &A, deviceVector<double> &x, const de
 
         //z_i = M^(-1)*r_i
         if(precond){
-            if(usePolakRibiereFormula)
+            if(usePolakRibiereFormula){
                 zk.swap(zkm);
+                v = zk.data;
+            }
             precond->applyPreconditioner(zk.data, rk.data);
         }
 

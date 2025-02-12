@@ -89,7 +89,7 @@ Rather than using a monolithic scheme, we adopt a fractional step approach to de
 
     1.2. Scheme B: $`\rho\dfrac{\boldsymbol{V}^{n+1/2} - \boldsymbol{V}^n}{\Delta t} = -\nabla p^{n} + \nabla\cdot\hat{\tau}^{n+1/2} + \rho\boldsymbol{g}`$
 
-    In $`\hat{\tau}^{n+1/2}`$ component of velocity field corresponding to the equation is approximated implicitly (e.g., $`V_x`$ for the $`x`$ equation), while the other one is approximated explicitly using its known values.
+    In $`\hat{\tau}^{n+1/2}`$ the component of velocity field corresponding to the equation is approximated implicitly (e.g., $`V_x`$ for the $`x`$ equation), while the other one is approximated explicitly using its known values.
 2. Poisson pressure equation
 
     2.1. Scheme A: $`\Delta p^{n+1} = \dfrac{\rho}{\Delta t}\nabla\cdot\boldsymbol{V}^{n+1/2}`$
