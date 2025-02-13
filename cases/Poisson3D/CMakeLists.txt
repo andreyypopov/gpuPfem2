@@ -2,8 +2,8 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.18)
 
 include(CMakePrintHelpers)
 
-project(Cylinder2D)
-SET(PROJECT_NAME "Cylinder2D")
+project(Poisson3D)
+SET(PROJECT_NAME "Poisson3D")
 SET(PROJECT_ROOT_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
 if (MSVC)

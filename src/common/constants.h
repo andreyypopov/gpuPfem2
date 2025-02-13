@@ -4,6 +4,7 @@
 struct CONSTANTS {
     static constexpr double DOUBLE_MIN = 2e-6;
     static constexpr double ONE_THIRD = 0.3333333333333333;                 //!< Math constant \f$\frac13\f$
+    static constexpr double ONE_SIXTH = 0.1666666666666667;                 //!< Math constant \f$\frac16\f$
     static constexpr double PI = 3.14159265358979323846;                    //!< Math constant \f$\pi\f$
     static constexpr double TWO_PI = 6.28318530717958647692;                //!< Math constant \f$2\pi\f$
 

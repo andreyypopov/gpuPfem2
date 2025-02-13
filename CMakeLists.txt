@@ -16,8 +16,10 @@ SET(PROJECT_SOURCE_PATH ${PROJECT_ROOT_PATH}/src)
 
 SET(src_files
 	${PROJECT_SOURCE_PATH}/data_export.cu
+	${PROJECT_SOURCE_PATH}/data_export_3d.cu
 	${PROJECT_SOURCE_PATH}/Dirichlet_bcs.cu
 	${PROJECT_SOURCE_PATH}/mesh_2d.cu
+	${PROJECT_SOURCE_PATH}/mesh_3d.cu
 	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cu
 	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cu
 	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cu
@@ -38,9 +40,11 @@ SET(src_particle_files
 	)
 SET(header_files
 	${PROJECT_SOURCE_PATH}/data_export.cuh
+	${PROJECT_SOURCE_PATH}/data_export_3d.cuh
 	${PROJECT_SOURCE_PATH}/Dirichlet_bcs.cuh
 	${PROJECT_SOURCE_PATH}/geometry.cuh
 	${PROJECT_SOURCE_PATH}/mesh_2d.cuh
+	${PROJECT_SOURCE_PATH}/mesh_3d.cuh
 	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cuh
 	${PROJECT_SOURCE_PATH}/parameters.cuh
 	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cuh

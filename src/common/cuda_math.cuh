@@ -1,13 +1,13 @@
 #ifndef CUDA_MATH_CUH
 #define CUDA_MATH_CUH
 
+typedef double2 Point2;
+typedef double3 Point3;
+
 #include "constants.h"
 #include "matrix3x3.cuh"
 
 #include <cstdio>
-
-typedef double2 Point2;
-typedef double3 Point3;
 
 __host__ __device__ inline double sqr(double x){
     return x * x;
@@ -85,8 +85,20 @@ __host__ __device__ inline Point3 operator+(const Point3 &v1, const Point3 &v2){
     return Point3({ v1.x + v2.x, v1.y + v2.y, v1.z + v2.z });
 }
 
+__host__ __device__ inline Point3 operator-(const Point3 &v1, const Point3 &v2){
+    return Point3({ v1.x - v2.x, v1.y - v2.y, v1.z - v2.z });
+}
+
 __host__ __device__ inline Point3 operator*(double a, const Point3 &v){
     return Point3({ v.x * a, v.y * a, v.z * a });
+}
+
+__host__ __device__ inline double dot(const Point3 &v1, const Point3 &v2){
+    return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+}
+
+__host__ __device__ inline Point3 cross(const Point3 &v1, const Point3 &v2){
+    return Point3({ v1.y * v2.z - v1.z * v2.y, v1.z * v2.x - v1.x * v2.z, v1.x * v2.y - v1.y * v2.x });
 }
 
 __host__ __device__ inline Point2 GivensRotation(const double &v1, const double &v2){
