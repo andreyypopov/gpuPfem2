@@ -23,6 +23,7 @@ SET(src_files
 	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cu
 	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cu
 	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cu
+	${PROJECT_SOURCE_PATH}/quadrature_formula_3d.cu
 	)
 SET(src_common_files
 	${PROJECT_SOURCE_PATH}/common/cuda_helper.cu
@@ -46,9 +47,11 @@ SET(header_files
 	${PROJECT_SOURCE_PATH}/mesh_2d.cuh
 	${PROJECT_SOURCE_PATH}/mesh_3d.cuh
 	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cuh
+	${PROJECT_SOURCE_PATH}/numerical_integrator_3d.cuh
 	${PROJECT_SOURCE_PATH}/parameters.cuh
 	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cuh
 	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cuh
+	${PROJECT_SOURCE_PATH}/quadrature_formula_3d.cuh
 	)
 SET(header_particle_files
 	${PROJECT_SOURCE_PATH}/particles/particle_2d.cuh
@@ -62,6 +65,7 @@ SET(header_common_files
 	${PROJECT_SOURCE_PATH}/common/device_vector.cuh
 	${PROJECT_SOURCE_PATH}/common/gpu_timer.cuh
 	${PROJECT_SOURCE_PATH}/common/matrix3x3.cuh
+	${PROJECT_SOURCE_PATH}/common/matrix4x4.cuh
 	${PROJECT_SOURCE_PATH}/common/profiling.h
 	${PROJECT_SOURCE_PATH}/common/utilities.h
 	)

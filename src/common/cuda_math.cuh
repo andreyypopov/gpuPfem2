@@ -3,6 +3,7 @@
 
 typedef double2 Point2;
 typedef double3 Point3;
+typedef double4 Point4;
 
 #include "constants.h"
 #include "matrix3x3.cuh"

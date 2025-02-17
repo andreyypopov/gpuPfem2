@@ -11,11 +11,11 @@ __global__ void kCalculateCellVolume(int n, const Point3 *vertices, const uint4 
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if(idx < n){
         const uint4 tetrahedron = cells[idx];
-        const Point3 v12 = vertices[tetrahedron.y] - vertices[tetrahedron.x];
-        const Point3 v13 = vertices[tetrahedron.z] - vertices[tetrahedron.x];
-        const Point3 v14 = vertices[tetrahedron.w] - vertices[tetrahedron.x];
+        const Point3 v41 = vertices[tetrahedron.x] - vertices[tetrahedron.w];
+        const Point3 v42 = vertices[tetrahedron.y] - vertices[tetrahedron.w];
+        const Point3 v43 = vertices[tetrahedron.z] - vertices[tetrahedron.w];
 
-        volumes[idx] = fabs(dot(v14, cross(v12, v13))) * CONSTANTS::ONE_SIXTH;
+        volumes[idx] = fabs(dot(v41, cross(v42, v43))) * CONSTANTS::ONE_SIXTH;
     }
 }
 
@@ -23,11 +23,11 @@ __global__ void kCalculateInvJacobi(int n, const Point3 *vertices, const uint4 *
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if(idx < n){
         const uint4 tetrahedron = cells[idx];
-        const Point3 v31 = vertices[tetrahedron.x] - vertices[tetrahedron.z];
-        const Point3 v32 = vertices[tetrahedron.y] - vertices[tetrahedron.z];
-        const Point3 v34 = vertices[tetrahedron.w] - vertices[tetrahedron.z];
+        const Point3 v41 = vertices[tetrahedron.x] - vertices[tetrahedron.w];
+        const Point3 v42 = vertices[tetrahedron.y] - vertices[tetrahedron.w];
+        const Point3 v43 = vertices[tetrahedron.z] - vertices[tetrahedron.w];
 
-        GenericMatrix3x3 Jacobi(v31, v32, v34);
+        GenericMatrix3x3 Jacobi(v41, v42, v43);
         invJacobi[idx] = Jacobi.transpose().inverse();
     }
 }

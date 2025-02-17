@@ -107,6 +107,16 @@ public:
         return data[3 * i + j];
     }
 
+    __host__ __device__ inline Point3 operator*(const Point3 &rhs) const
+    {
+        Point3 res;
+        res.x = data[0] * rhs.x + data[1] * rhs.y + data[2] * rhs.z;
+        res.y = data[3] * rhs.x + data[4] * rhs.y + data[5] * rhs.z;
+        res.z = data[6] * rhs.x + data[7] * rhs.y + data[8] * rhs.z;
+
+        return res;
+    }
+
     __host__ __device__ inline GenericMatrix3x3 transpose() const
     {
         return GenericMatrix3x3(data[0], data[3], data[6],

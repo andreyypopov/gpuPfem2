@@ -11,6 +11,7 @@ struct CONSTANTS {
     static constexpr int MAX_SIMPLE_NEIGHBORS_PER_CELL = 12;
     static constexpr double MEMORY_REALLOCATION_COEFFICIENT = 1.1;
     static constexpr int MAX_GAUSS_POINTS = 13;
+    static constexpr int MAX_GAUSS_POINTS_3D = 31;
     static constexpr int MAX_CELL_DIVISION_LEVEL = 4;
     static constexpr int MAX_PARTICLES_PER_CELL = MAX_CELL_DIVISION_LEVEL * MAX_CELL_DIVISION_LEVEL;
 };
