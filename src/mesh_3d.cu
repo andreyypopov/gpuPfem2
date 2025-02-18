@@ -28,7 +28,7 @@ __global__ void kCalculateInvJacobi(int n, const Point3 *vertices, const uint4 *
         const Point3 v43 = vertices[tetrahedron.z] - vertices[tetrahedron.w];
 
         GenericMatrix3x3 Jacobi(v41, v42, v43);
-        invJacobi[idx] = Jacobi.transpose().inverse();
+        invJacobi[idx] = Jacobi.inverse();
     }
 }
 
