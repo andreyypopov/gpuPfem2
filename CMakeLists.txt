@@ -20,15 +20,16 @@ SET(src_files
 	${PROJECT_SOURCE_PATH}/Dirichlet_bcs.cu
 	${PROJECT_SOURCE_PATH}/mesh_2d.cu
 	${PROJECT_SOURCE_PATH}/mesh_3d.cu
-	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cu
-	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cu
-	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cu
-	${PROJECT_SOURCE_PATH}/quadrature_formula_3d.cu
 	)
 SET(src_common_files
 	${PROJECT_SOURCE_PATH}/common/cuda_helper.cu
 	${PROJECT_SOURCE_PATH}/common/cuda_math.cu
 	${PROJECT_SOURCE_PATH}/common/utilities.cpp
+)
+SET(src_integration_files
+	${PROJECT_SOURCE_PATH}/integration/quadrature_formula_1d.cu
+	${PROJECT_SOURCE_PATH}/integration/quadrature_formula_2d.cu
+	${PROJECT_SOURCE_PATH}/integration/quadrature_formula_3d.cu
 )
 SET(src_linear_algebra_files
 	${PROJECT_SOURCE_PATH}/linear_algebra/linear_solver.cu
@@ -46,12 +47,7 @@ SET(header_files
 	${PROJECT_SOURCE_PATH}/geometry.cuh
 	${PROJECT_SOURCE_PATH}/mesh_2d.cuh
 	${PROJECT_SOURCE_PATH}/mesh_3d.cuh
-	${PROJECT_SOURCE_PATH}/numerical_integrator_2d.cuh
-	${PROJECT_SOURCE_PATH}/numerical_integrator_3d.cuh
 	${PROJECT_SOURCE_PATH}/parameters.cuh
-	${PROJECT_SOURCE_PATH}/quadrature_formula_1d.cuh
-	${PROJECT_SOURCE_PATH}/quadrature_formula_2d.cuh
-	${PROJECT_SOURCE_PATH}/quadrature_formula_3d.cuh
 	)
 SET(header_particle_files
 	${PROJECT_SOURCE_PATH}/particles/particle_2d.cuh
@@ -69,6 +65,13 @@ SET(header_common_files
 	${PROJECT_SOURCE_PATH}/common/profiling.h
 	${PROJECT_SOURCE_PATH}/common/utilities.h
 	)
+SET(header_integration_files
+	${PROJECT_SOURCE_PATH}/integration/numerical_integrator_2d.cuh
+	${PROJECT_SOURCE_PATH}/integration/numerical_integrator_3d.cuh
+	${PROJECT_SOURCE_PATH}/integration/quadrature_formula_1d.cuh
+	${PROJECT_SOURCE_PATH}/integration/quadrature_formula_2d.cuh
+	${PROJECT_SOURCE_PATH}/integration/quadrature_formula_3d.cuh
+)
 SET(header_linear_algebra_files
 	${PROJECT_SOURCE_PATH}/linear_algebra/linear_algebra.h
 	${PROJECT_SOURCE_PATH}/linear_algebra/linear_solver.cuh
@@ -91,12 +94,22 @@ source_group("gpuPfem2/common" FILES
 	${header_common_files}
 )
 
+source_group("gpuPfem2/integration" FILES
+	${src_integration_files}
+	${header_integration_files}
+)
+
+source_group("gpuPfem2/linear_algebra" FILES
+	${src_linear_algebra_files}
+	${header_linear_algebra_files}
+)
+
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_INSTALL_PREFIX "${PROJECT_ROOT_PATH}/install" CACHE PATH "Library installation path" FORCE)
 endif()
 
-add_library(gpuPfem2Lib SHARED ${src_files} ${src_particle_files} ${src_common_files} ${src_linear_algebra_files} ${header_files}
-	${header_particle_files} ${header_common_files} ${header_linear_algebra_files})
+add_library(gpuPfem2Lib SHARED ${src_files} ${src_particle_files} ${src_common_files} ${src_integration_files} ${src_linear_algebra_files} ${header_files}
+	${header_particle_files} ${header_common_files} ${header_integration_files} ${header_linear_algebra_files})
 
 setup_openmp(${PROJECT_NAME})
 setup_cuda(${PROJECT_NAME})
@@ -104,6 +117,7 @@ setup_cuda(${PROJECT_NAME})
 install(TARGETS gpuPfem2Lib)
 install(FILES ${header_files} DESTINATION include)
 install(FILES ${header_common_files} DESTINATION include/common)
+install(FILES ${header_integration_files} DESTINATION include/integration)
 install(FILES ${header_linear_algebra_files} DESTINATION include/linear_algebra)
 install(FILES ${header_particle_files} DESTINATION include/particles)
 

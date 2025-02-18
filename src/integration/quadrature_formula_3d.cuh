@@ -1,9 +1,9 @@
 #ifndef QUADRATURE_FORMULA_3D_CUH
 #define QUADRATURE_FORMULA_3D_CUH
 
-#include "common/cuda_helper.cuh"
-#include "common/cuda_math.cuh"
-#include "common/device_vector.cuh"
+#include "../common/cuda_helper.cuh"
+#include "../common/cuda_math.cuh"
+#include "../common/device_vector.cuh"
 
 #include <vector>
 

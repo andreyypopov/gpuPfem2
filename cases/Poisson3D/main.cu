@@ -2,11 +2,12 @@
 #include "Dirichlet_bcs.cuh"
 #include "geometry.cuh"
 #include "mesh_3d.cuh"
-#include "quadrature_formula_3d.cuh"
-#include "numerical_integrator_3d.cuh"
 
 #include "common/cuda_math.cuh"
 #include "common/gpu_timer.cuh"
+
+#include "integration/quadrature_formula_3d.cuh"
+#include "integration/numerical_integrator_3d.cuh"
 
 #include "linear_algebra/linear_algebra.h"
 #include "linear_algebra/linear_solver.cuh"

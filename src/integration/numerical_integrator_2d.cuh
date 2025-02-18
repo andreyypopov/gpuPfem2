@@ -1,9 +1,9 @@
 #ifndef NUMERICAL_INTEGRATOR_2D_CUH
 #define NUMERICAL_INTEGRATOR_2D_CUH
 
-#include "common/constants.h"
-#include "mesh_2d.cuh"
-#include "linear_algebra/sparse_matrix.cuh"
+#include "../common/constants.h"
+#include "../mesh_2d.cuh"
+#include "../linear_algebra/sparse_matrix.cuh"
 
 __device__ inline Point2 shapeFuncGrad(int i) {
     switch (i)
@@ -45,9 +45,11 @@ __device__ inline void addLocalToGlobal(const uint3& triangle, const double area
 class NumericalIntegrator2D
 {
 public:
-    NumericalIntegrator2D(const Mesh2D &mesh_);
+    NumericalIntegrator2D(const Mesh2D &mesh_)
+        : mesh(mesh_)
+    {};
 
-    virtual ~NumericalIntegrator2D();
+    virtual ~NumericalIntegrator2D(){ };
 
 protected:
     const Mesh2D &mesh;

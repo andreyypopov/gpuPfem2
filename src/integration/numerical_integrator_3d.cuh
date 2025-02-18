@@ -1,10 +1,10 @@
 #ifndef NUMERICAL_INTEGRATOR_3D_CUH
 #define NUMERICAL_INTEGRATOR_3D_CUH
 
-#include "common/constants.h"
-#include "common/matrix4x4.cuh"
-#include "mesh_3d.cuh"
-#include "linear_algebra/sparse_matrix.cuh"
+#include "../common/constants.h"
+#include "../common/matrix4x4.cuh"
+#include "../mesh_3d.cuh"
+#include "../linear_algebra/sparse_matrix.cuh"
 
 __device__ inline Point3 shapeFuncGrad3D(int i) {
     switch (i)
