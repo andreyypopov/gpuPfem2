@@ -53,6 +53,51 @@ void SparseMatrixCSR::initialize(const Mesh2D &mesh)
     clearValues();
 }
 
+void SparseMatrixCSR::initialize(const Mesh3D &mesh)
+{
+    rows = mesh.getHostVertices().size();
+    const int nCells = mesh.getHostCells().size();
+
+    std::vector<std::set<int>> connectivity(rows);
+
+#pragma omp parallel for
+    for(int i = 0; i < rows; ++i)
+        connectivity[i].insert(i);
+
+    for(int i = 0; i < nCells; ++i){
+        const uint4 tet = mesh.getHostCells()[i];
+
+        for(unsigned int k = 0; k < 4; ++k)
+            for(unsigned int l = 0; l < 4; ++l)
+                connectivity[*(&tet.x + k)].insert(*(&tet.x + l));
+    }
+
+    std::vector<int> elementsPerRow(rows);
+#pragma omp parallel for
+    for(int i = 0; i < rows; ++i)
+        elementsPerRow[i] = connectivity[i].size();
+
+    totalElements = std::accumulate(elementsPerRow.begin(), elementsPerRow.end(), 0);
+
+    std::vector<int> hostRowOffset(rows + 1);
+    std::vector<int> hostColIndices(totalElements);
+
+    for(int i = 0; i < rows; ++i)
+        hostRowOffset[i + 1] = hostRowOffset[i] + elementsPerRow[i];
+
+#pragma omp parallel for
+    for(int i = 0; i < rows; ++i)
+        std::copy(connectivity[i].begin(), connectivity[i].end(), hostColIndices.begin() + hostRowOffset[i]);
+
+    rowOffset.allocate(rows + 1);
+    colIndices.allocate(totalElements);
+    matrixValues.allocate(totalElements);
+
+    copy_h2d(hostRowOffset.data(), rowOffset.data, rows + 1);
+    copy_h2d(hostColIndices.data(), colIndices.data, totalElements);
+    clearValues();
+}
+
 bool SparseMatrixCSR::exportMatrix(const std::string& filename) const
 {
     std::ofstream outputFile(filename.c_str());

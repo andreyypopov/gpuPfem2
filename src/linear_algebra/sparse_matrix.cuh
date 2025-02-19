@@ -4,6 +4,7 @@
 #include "../common/cuda_memory.cuh"
 #include "../common/device_vector.cuh"
 #include "../mesh_2d.cuh"
+#include "../mesh_3d.cuh"
 
 class SparseMatrixCSR
 {
@@ -13,7 +14,12 @@ public:
         initialize(mesh);
     };
 
+    explicit SparseMatrixCSR(const Mesh3D &mesh){
+        initialize(mesh);
+    };
+
     void initialize(const Mesh2D &mesh);
+    void initialize(const Mesh3D &mesh);
 
     int* getRowOffset() const {
         return rowOffset.data;

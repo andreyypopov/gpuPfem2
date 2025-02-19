@@ -7,6 +7,10 @@ namespace GEOMETRY
         return Lcoordinates.x * triangleVertices[0] + Lcoordinates.y * triangleVertices[1] + Lcoordinates.z * triangleVertices[2];
     }
 
+    __device__ inline Point3 transformLocalToGlobal(const Point4 &Lcoordinates, const Point3 *tetVertices){
+        return Lcoordinates.x * tetVertices[0] + Lcoordinates.y * tetVertices[1] + Lcoordinates.z * tetVertices[2] + Lcoordinates.w * tetVertices[3];
+    }
+
     __device__ inline Point3 transformGlobalToLocal(const Point2 &globalCoord, const Matrix2x2 &invJacobi, const Point2 &v3){
         Point3 res;
         //invJacobi needs to be transposed here (which means multiplication of its columns by (p - v3))
@@ -14,6 +18,18 @@ namespace GEOMETRY
         res.x = invJacobi(0,0) * drv3.x + invJacobi(1,0) * drv3.y;
         res.y = invJacobi(0,1) * drv3.x + invJacobi(1,1) * drv3.y;
         res.z = 1.0 - res.x - res.y;
+
+        return res;
+    }
+
+    __device__ inline Point4 transformGlobalToLocal(const Point3 &globalCoord, const GenericMatrix3x3 &invJacobi, const Point3 &v4){
+        Point4 res;
+        const Point3 drv4 = globalCoord - v4;
+        const Point3 aux = invJacobi * drv4;
+        res.x = aux.x;
+        res.y = aux.y;
+        res.z = aux.z;
+        res.w = 1.0 - res.x - res.y - res.z;
 
         return res;
     }
