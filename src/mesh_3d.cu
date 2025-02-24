@@ -133,7 +133,7 @@ bool Mesh3D::loadMeshFromFile(const std::string &filename, bool fillNeighborList
         set_value_device(faceBoundaryIDs.data, -1, cells.size);
 
         if(fillNeighborLists)
-            fillCellNeighborIndicesGPU();
+            fillCellNeighborIndices();
 
         initMesh();
 
@@ -155,7 +155,7 @@ void Mesh3D::initMesh()
     kCalculateInvJacobi<<<blocks, gpuThreads>>>(cells.size, vertices.data, cells.data, invJacobi.data);
 }
 
-void Mesh3D::fillCellNeighborIndices(const std::vector<uint4> &hostCells)
+void Mesh3D::fillCellNeighborIndicesCPU(const std::vector<uint4> &hostCells)
 {
     const int numCells = hostCells.size();
     std::vector<std::set<int>> hostCellNeighbors(numCells);
@@ -195,7 +195,7 @@ void Mesh3D::fillCellNeighborIndices(const std::vector<uint4> &hostCells)
     copy_h2d(hostCellNeighborIndices.data(), cellNeighborIndices.data, hostCellNeighborOffsets.back());
 }
 
-void Mesh3D::fillCellNeighborIndicesGPU()
+void Mesh3D::fillCellNeighborIndices()
 {
     cellNeighborsOffsets.allocate(cells.size + 1);
     cellNeighborsOffsets.clearValues();
