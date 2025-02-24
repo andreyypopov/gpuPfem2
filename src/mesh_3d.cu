@@ -204,16 +204,16 @@ void Mesh3D::fillCellNeighborIndicesGPU()
     unsigned int blocks = blocksForSize(cells.size, gpuThreadsMax);
     kFindNeighbors<<<blocks, gpuThreadsMax>>>(cells.size, cells.data, cellNeighborsOffsets.data);
 
-    //2.1 Get the necessary buffer size for the prefix sum
+    //2.1 Get the necessary buffer size for the prefix sum (+1 offset is used as the cell 1 contains number of neighbors for cell 0, 2 - for cell 1, etc.)
     void *tmpStorage = nullptr;
     size_t tmpStorageBytes = 0;
-    cub::DeviceScan::InclusiveSum(tmpStorage, tmpStorageBytes, cellNeighborsOffsets.data + 1, cells.size);
+    cub::DeviceScan::InclusiveSum(tmpStorage, tmpStorageBytes, cellNeighborsOffsets.data + 1, cellNeighborsOffsets.data + 1, cells.size);
 
     //2.2 Allocate the buffer for the prefix sum
     checkCudaErrors(cudaMalloc(&tmpStorage, tmpStorageBytes));
 
     //2.3 Perform the prefix sum to convert numbers of neighbors to offsets (the last number will be equal to total number)
-    cub::DeviceScan::InclusiveSum(tmpStorage, tmpStorageBytes, cellNeighborsOffsets.data + 1, cells.size);
+    cub::DeviceScan::InclusiveSum(tmpStorage, tmpStorageBytes, cellNeighborsOffsets.data + 1, cellNeighborsOffsets.data + 1, cells.size);
 
     //3. Copy the total number of neighbors for all cells and allocate the vector for neighbor indices
     int total;
