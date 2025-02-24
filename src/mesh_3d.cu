@@ -2,6 +2,8 @@
 
 #include "common/cuda_memory.cuh"
 
+#include <cub/device/device_scan.cuh>
+
 #include <array>
 #include <fstream>
 #include <set>
@@ -30,6 +32,53 @@ __global__ void kCalculateInvJacobi(int n, const Point3 *vertices, const uint4 *
         GenericMatrix3x3 Jacobi(v41, v42, v43);
         invJacobi[idx] = Jacobi.inverse();
     }
+}
+
+__global__ void kFindNeighbors(int n, const uint4 *cells, int *cellNeighborsOffsets, int *cellNeighborIndices = nullptr){
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    __shared__ uint4 sharedCells[gpuThreadsMax];
+
+    unsigned int neighborCount = 0;
+    int offset = cellNeighborsOffsets[idx];
+
+    for(int blockStart = 0; blockStart < n; blockStart += gpuThreadsMax){
+        //load batch of cell data into shared memory
+        if(blockStart + threadIdx.x < n)
+            sharedCells[threadIdx.x] = cells[blockStart + threadIdx.x];
+
+        __syncthreads();
+
+        if(idx < n){
+            const uint4 tri1 = cells[idx];
+
+            for(int cellIdx = 0; cellIdx < gpuThreadsMax; ++cellIdx)
+                if(blockStart + cellIdx < n && cellIdx != idx){
+                    unsigned int commonPoints = 0;
+
+                    const uint4 tri2 = sharedCells[cellIdx];
+
+                    for(int i = 0; i < 4; ++i)
+                        for(int j = 0; j < 4; ++j)
+                            if(*(&tri1.x + i) == *(&tri2.x + j))
+                                ++commonPoints;
+
+                    if(commonPoints == 3){
+                        if(cellNeighborIndices)
+                            cellNeighborIndices[offset + neighborCount] = blockStart + cellIdx;
+                        ++neighborCount;
+                    }
+                }
+        }
+
+        __syncthreads();
+    }
+
+    //number of neighbors of the cell is temporarily written to the offset vector
+    //(+1 position is used for the purpose of further prefix sum to convert numbers to offsets,
+    //so that the last element + 1 will contain the total count of neighbors for all cells)
+    if(!cellNeighborIndices && idx < n)
+        cellNeighborsOffsets[idx + 1] = neighborCount;
 }
 
 bool Mesh3D::loadMeshFromFile(const std::string &filename, bool fillNeighborLists, double scale)
@@ -84,7 +133,7 @@ bool Mesh3D::loadMeshFromFile(const std::string &filename, bool fillNeighborList
         set_value_device(faceBoundaryIDs.data, -1, cells.size);
 
         if(fillNeighborLists)
-            fillCellNeighborIndices(hostCells);
+            fillCellNeighborIndicesGPU();
 
         initMesh();
 
@@ -144,4 +193,35 @@ void Mesh3D::fillCellNeighborIndices(const std::vector<uint4> &hostCells)
 
     copy_h2d(hostCellNeighborOffsets.data(), cellNeighborsOffsets.data, numCells + 1);
     copy_h2d(hostCellNeighborIndices.data(), cellNeighborIndices.data, hostCellNeighborOffsets.back());
+}
+
+void Mesh3D::fillCellNeighborIndicesGPU()
+{
+    cellNeighborsOffsets.allocate(cells.size + 1);
+    cellNeighborsOffsets.clearValues();
+
+    //1. Get number of neighbors for each cell, without saving the neighbor indices
+    unsigned int blocks = blocksForSize(cells.size, gpuThreadsMax);
+    kFindNeighbors<<<blocks, gpuThreadsMax>>>(cells.size, cells.data, cellNeighborsOffsets.data);
+
+    //2.1 Get the necessary buffer size for the prefix sum
+    void *tmpStorage = nullptr;
+    size_t tmpStorageBytes = 0;
+    cub::DeviceScan::InclusiveSum(tmpStorage, tmpStorageBytes, cellNeighborsOffsets.data + 1, cells.size);
+
+    //2.2 Allocate the buffer for the prefix sum
+    checkCudaErrors(cudaMalloc(&tmpStorage, tmpStorageBytes));
+
+    //2.3 Perform the prefix sum to convert numbers of neighbors to offsets (the last number will be equal to total number)
+    cub::DeviceScan::InclusiveSum(tmpStorage, tmpStorageBytes, cellNeighborsOffsets.data + 1, cells.size);
+
+    //3. Copy the total number of neighbors for all cells and allocate the vector for neighbor indices
+    int total;
+    copy_d2h(cellNeighborsOffsets.data + (cellNeighborsOffsets.size - 1), &total, 1);
+    cellNeighborIndices.allocate(total);
+
+    //4. Run the kernel again, this time saving the neighbor indices and not altering the offsets
+    kFindNeighbors<<<blocks, gpuThreadsMax>>>(cells.size, cells.data, cellNeighborsOffsets.data, cellNeighborIndices.data);
+
+    checkCudaErrors(cudaFree(tmpStorage));
 }
