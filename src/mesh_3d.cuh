@@ -52,7 +52,8 @@ public:
     }
 
 private:
-    void fillCellNeighborIndices(const std::vector<uint4> &hostCells);
+    void fillCellNeighborIndicesCPU(const std::vector<uint4> &hostCells);
+    void fillCellNeighborIndices();
 
     deviceVector<Point3> vertices;               //!< Vector of vertices coordinates
     deviceVector<uint4> cells;                   //!< Vector of indices of vertices describing each tetrahedral cell
