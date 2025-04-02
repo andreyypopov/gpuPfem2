@@ -45,6 +45,19 @@ namespace GEOMETRY
         return true;
     }
 
+    __device__ inline bool isPointInsideUnitTet(const Point4 &localCoord){
+        if(localCoord.x > 1.0 + CONSTANTS::DOUBLE_MIN || localCoord.x < -CONSTANTS::DOUBLE_MIN)
+            return false;
+        if(localCoord.y > 1.0 + CONSTANTS::DOUBLE_MIN || localCoord.y < -CONSTANTS::DOUBLE_MIN)
+            return false;
+        if(localCoord.z > 1.0 + CONSTANTS::DOUBLE_MIN || localCoord.z < -CONSTANTS::DOUBLE_MIN)
+            return false;
+        if(localCoord.w > 1.0 + CONSTANTS::DOUBLE_MIN || localCoord.w < -CONSTANTS::DOUBLE_MIN)
+            return false;
+        
+        return true;
+    }
+
     __host__ __device__ inline double distance(const Point2 &from, const Point2 &to){
         return sqrt((from.x - to.x) * (from.x - to.x) + (from.y - to.y) * (from.y - to.y));
     }

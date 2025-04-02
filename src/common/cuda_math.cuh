@@ -102,6 +102,14 @@ __host__ __device__ inline Point3 cross(const Point3 &v1, const Point3 &v2){
     return Point3({ v1.y * v2.z - v1.z * v2.y, v1.z * v2.x - v1.x * v2.z, v1.x * v2.y - v1.y * v2.x });
 }
 
+__host__ __device__ inline Point4 operator+(const Point4 &v1, const Point4 &v2){
+    return Point4({ v1.x + v2.x, v1.y + v2.y, v1.z + v2.z, v1.w + v2.w });
+}
+
+__host__ __device__ inline Point4 operator*(double a, const Point4 &v){
+    return Point4({ v.x * a, v.y * a, v.z * a, v.w * a });
+}
+
 __host__ __device__ inline Point2 GivensRotation(const double &v1, const double &v2){
     const double coeff = rsqrt(v1 * v1 + v2 * v2);
 

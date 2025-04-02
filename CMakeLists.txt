@@ -39,6 +39,8 @@ SET(src_linear_algebra_files
 SET(src_particle_files
 	${PROJECT_SOURCE_PATH}/particles/particle_2d.cu
 	${PROJECT_SOURCE_PATH}/particles/particle_handler_2d.cu
+	${PROJECT_SOURCE_PATH}/particles/particle_3d.cu
+	${PROJECT_SOURCE_PATH}/particles/particle_handler_3d.cu
 	)
 SET(header_files
 	${PROJECT_SOURCE_PATH}/data_export.cuh
@@ -52,6 +54,8 @@ SET(header_files
 SET(header_particle_files
 	${PROJECT_SOURCE_PATH}/particles/particle_2d.cuh
 	${PROJECT_SOURCE_PATH}/particles/particle_handler_2d.cuh
+	${PROJECT_SOURCE_PATH}/particles/particle_3d.cuh
+	${PROJECT_SOURCE_PATH}/particles/particle_handler_3d.cuh
 	)
 SET(header_common_files
 	${PROJECT_SOURCE_PATH}/common/constants.h
