@@ -17,6 +17,82 @@ __host__ __device__ Point3 baseNode(int i, int j, int k, double subcellStep){
     return res;
 }
 
+__global__ void kAdvectParticles3D(int n, const uint4 *cells, Particle3D *particles, double **velocity, double timeStep){
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n){
+        Particle3D &particle = particles[idx];
+
+        const uint4 tet = cells[particle.getCellID()];
+
+        const Point4 localPos = particles[idx].getLocalPosition();
+        Point3 advectionVelocity = { 0.0, 0.0, 0.0 };
+        unsigned int index;
+        double shapeValue;
+        for(int i = 0; i < 4; ++i){
+            index = *(&tet.x + i);
+            shapeValue = *(&localPos.x + i);
+            advectionVelocity.x += shapeValue * velocity[0][index];
+            advectionVelocity.y += shapeValue * velocity[1][index];
+            advectionVelocity.z += shapeValue * velocity[2][index];
+        }
+
+        particle.setPosition(particle.getPosition() + timeStep * advectionVelocity);
+    }
+}
+
+__global__ void kCorrectParticleVelocity3D(int n, const uint4 *cells, Particle3D *particles, double **velocity, double **velocityOld = nullptr){
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n){
+        Particle3D &particle = particles[idx];
+
+        const uint4 tet = cells[particle.getCellID()];
+
+        const Point4 localPos = particle.getLocalPosition();
+        Point3 velocityIncrement = { 0.0, 0.0, 0.0 };
+        unsigned int index;
+        double shapeValue;
+        for(int i = 0; i < 4; ++i){
+            index = *(&tet.x + i);
+            shapeValue = *(&localPos.x + i);
+            velocityIncrement.x += shapeValue * (velocity[0][index] - (velocityOld ? velocityOld[0][index] : 0.0));
+            velocityIncrement.y += shapeValue * (velocity[1][index] - (velocityOld ? velocityOld[1][index] : 0.0));
+            velocityIncrement.z += shapeValue * (velocity[2][index] - (velocityOld ? velocityOld[2][index] : 0.0));
+        }
+
+        particle.setVelocity(particle.getVelocity() + velocityIncrement);
+    }
+}
+
+__global__ void kProjectParticleVelocityOntoGrid3D(int n, const uint4 *cells, Particle3D *particles, double **projectionVelocity, double *projectionWeights){
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n){
+        Particle3D &particle = particles[idx];
+
+        const uint4 tet = cells[particle.getCellID()];
+
+        const Point4 localPos = particle.getLocalPosition();
+        unsigned int index;
+        double shapeValue;
+        for(int i = 0; i < 4; ++i){
+            shapeValue = *(&localPos.x + i);
+            index = *(&tet.x + i);
+            
+            atomicAdd(&projectionVelocity[0][index], shapeValue * particle.getVelocity().x);
+            atomicAdd(&projectionVelocity[1][index], shapeValue * particle.getVelocity().y);
+            atomicAdd(&projectionVelocity[2][index], shapeValue * particle.getVelocity().z);
+            atomicAdd(&projectionWeights[index], shapeValue);
+        }
+    }
+}
+
+__global__ void kFinalizeVelocityProjection3D(int n, double **velocity, double **projectionVelocity, double *projectionWeights){
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n){
+        for(int i = 0; i < 3; ++i)
+            velocity[i][idx] = projectionVelocity[i][idx] / projectionWeights[idx];
+    }
+}
+
 ParticleHandler3D::ParticleHandler3D(const Mesh3D *mesh_, int cellDivisionLevel)
     : mesh(mesh_)
 {
@@ -99,4 +175,23 @@ ParticleHandler3D::~ParticleHandler3D()
     free_device(particlesForCheckInNeighborCellsCount);
     free_device(particlesToBeDeletedCount);
     free_device(particlesToBeAddedCount);
+}
+
+void ParticleHandler3D::correctParticleVelocity(const deviceVector<double *> &velocitySolution, const deviceVector<double *> &velocitySolutionOld)
+{
+    unsigned int blocks = blocksForSize(particleCount);
+    kCorrectParticleVelocity3D<<<blocks, gpuThreads>>>(particleCount, mesh->getCells().data, particles.data, velocitySolution.data, velocitySolutionOld.data);
+}
+
+void ParticleHandler3D::projectVelocityOntoGrid(deviceVector<double *> &velocity)
+{
+    for(int i = 0; i < 3; ++i)
+        projectionVelocity[i].clearValues();
+    projectionWeights.clearValues();
+    
+    unsigned int blocks = blocksForSize(particleCount);
+    kProjectParticleVelocityOntoGrid3D<<<blocks, gpuThreads>>>(particleCount, mesh->getCells().data, particles.data, projectionVelocityPtrs.data, projectionWeights.data);
+
+    blocks = blocksForSize(mesh->getVertices().size);
+    kFinalizeVelocityProjection3D<<<blocks, gpuThreads>>>(mesh->getVertices().size, velocity.data, projectionVelocityPtrs.data, projectionWeights.data);
 }

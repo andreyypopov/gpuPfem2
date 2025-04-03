@@ -12,6 +12,10 @@ public:
     ParticleHandler3D(const Mesh3D *mesh_, int cellDivisionLevel);
     ~ParticleHandler3D();
 
+    void correctParticleVelocity(const deviceVector<double*> &velocitySolution, const deviceVector<double*> &velocitySolutionOld);
+
+    void projectVelocityOntoGrid(deviceVector<double*> &velocity);
+
     const Particle3D *getParticles() const {
         return particles.data;
     }
