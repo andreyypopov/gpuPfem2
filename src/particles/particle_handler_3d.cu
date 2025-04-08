@@ -4,6 +4,7 @@
 
 __constant__ Point4 subtetCenters[CONSTANTS::MAX_PARTICLES_PER_TET];
 __constant__ int3 subtetCubeIndices[CONSTANTS::MAX_PARTICLES_PER_TET];
+__constant__ int subtetCubeOffsets[CONSTANTS::MAX_PARTICLES_PER_TET + 1];
 __constant__ int particlesPerTet;
 __constant__ int subtetsPerDim;
 __constant__ double subtetStep;
@@ -15,6 +16,30 @@ __host__ __device__ Point3 baseNode(int i, int j, int k, double subcellStep){
     res.z = max(min(k * subcellStep, 1.0), 0.0);
 
     return res;
+}
+
+__device__ inline int flatIndex(int i, int j, int k){
+    return i * subtetsPerDim * subtetsPerDim + j * subtetsPerDim + k;
+}
+
+__global__ void kSeedParticlesIntoCell3D(int n, const Point3 *vertices, const uint4 *cells, Particle3D *particles, int *count){
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n){
+        const uint4 tet = cells[idx];
+
+        Point3 tetVertices[4];
+        tetVertices[0] = vertices[tet.x];
+        tetVertices[1] = vertices[tet.y];
+        tetVertices[2] = vertices[tet.z];
+        tetVertices[3] = vertices[tet.w];
+
+        int startIndex = atomicAdd(count, particlesPerTet);
+        for(int i = 0; i < particlesPerTet; ++i){
+            Particle3D particle(GEOMETRY::transformLocalToGlobal(subtetCenters[i], tetVertices), subtetCenters[i], startIndex + i);
+            particle.setCellID(idx);
+            particles[startIndex + i] = particle;
+        }
+    }
 }
 
 __global__ void kAdvectParticles3D(int n, const uint4 *cells, Particle3D *particles, double **velocity, double timeStep){
@@ -105,6 +130,8 @@ ParticleHandler3D::ParticleHandler3D(const Mesh3D *mesh_, int cellDivisionLevel)
 
     std::vector<Point4> hostSubcellCenters(hostParticlesPerTet);
     std::vector<int3> hostSubcellCubeIndices(hostParticlesPerTet);
+    std::vector<int> hostSubcellCubeOffsets(hostParticlesPerTet + 1);
+    hostSubcellCubeOffsets[0] = 0;
 
     int particleNum = -1;
     Point4 subcellVertices[4];
@@ -114,7 +141,9 @@ ParticleHandler3D::ParticleHandler3D(const Mesh3D *mesh_, int cellDivisionLevel)
     const Point3 unitCubeVertices[8] =
         { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 1, 0 }, { 0, 0, 1 }, { 1, 0, 1 }, { 0, 1, 1 }, { 1, 1, 1 } };
     const int4 unitCubeTetVertexIndices[6] =
-        { { 0, 1, 2, 4 }, { 2, 4, 5, 6 }, { 1, 2, 4, 5 }, { 1, 2, 3, 5 }, {2, 3, 5, 6 }, { 3, 5, 6, 7 } };
+        { { 0, 1, 2, 4 }, { 2, 4, 5, 6 }, { 1, 2, 4, 5 }, { 1, 2, 3, 5 }, { 2, 3, 5, 6 }, { 3, 5, 6, 7 } };
+
+    auto hostFlatIndex = [&subcellsNumber](int i, int j, int k){ return i * subcellsNumber * subcellsNumber + j * subcellsNumber + k; };
 
     for(int i = 0; i < subcellsNumber; ++i)
         for(int j = 0; j < subcellsNumber; ++j)
@@ -144,10 +173,13 @@ ParticleHandler3D::ParticleHandler3D(const Mesh3D *mesh_, int cellDivisionLevel)
                     hostSubcellCenters[particleNum] = center;
                     hostSubcellCubeIndices[particleNum] = { i, j, k };
                 }
+
+                hostSubcellCubeOffsets[hostFlatIndex(i, j, k) + 1] = particleNum + 1;
             }
 
     copy_h2const(hostSubcellCenters.data(), subtetCenters, hostParticlesPerTet);
     copy_h2const(hostSubcellCubeIndices.data(), subtetCubeIndices, hostParticlesPerTet);
+    copy_h2const(hostSubcellCubeOffsets.data(), subtetCubeOffsets, hostParticlesPerTet + 1);
     particleCount = hostParticlesPerTet * mesh->getCells().size;
 
     allocate_device(&deviceParticleCount, 1);
@@ -175,6 +207,30 @@ ParticleHandler3D::~ParticleHandler3D()
     free_device(particlesForCheckInNeighborCellsCount);
     free_device(particlesToBeDeletedCount);
     free_device(particlesToBeAddedCount);
+}
+
+void ParticleHandler3D::seedParticles()
+{
+    particles.allocate(particleCount * CONSTANTS::MEMORY_REALLOCATION_COEFFICIENT);
+    particlesForCheckInNeighborCells.allocate(particleCount);
+    particlesToBeDeleted.allocate(particleCount / 10);
+
+    unsigned int blocks = blocksForSize(mesh->getCells().size);
+
+    zero_value_device(deviceParticleCount, 1);
+    kSeedParticlesIntoCell3D<<<blocks, gpuThreads>>>(mesh->getCells().size, mesh->getVertices().data, mesh->getCells().data, particles.data, deviceParticleCount);
+
+    cudaDeviceSynchronize();
+    int particlesSeeded;
+    copy_d2h(deviceParticleCount, &particlesSeeded, 1);
+
+    printf("Created %d particles\n", particlesSeeded);
+}
+
+void ParticleHandler3D::initParticleVelocity(const deviceVector<double *> &velocitySolution)
+{
+    unsigned int blocks = blocksForSize(particleCount);
+    kCorrectParticleVelocity3D<<<blocks, gpuThreads>>>(particleCount, mesh->getCells().data, particles.data, velocitySolution.data);
 }
 
 void ParticleHandler3D::correctParticleVelocity(const deviceVector<double *> &velocitySolution, const deviceVector<double *> &velocitySolutionOld)
