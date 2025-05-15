@@ -1,4 +1,4 @@
-# additional functions for setup of the integrator2 library and test applications
+# additional functions for setup of the gpuPfem2lib library
 
 macro(setup_cuda target_name)
 	enable_language(CUDA)

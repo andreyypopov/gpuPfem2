@@ -58,6 +58,36 @@ namespace GEOMETRY
         return true;
     }
 
+    //check whether a point is inside or outside the arbitrary (not a unit one) tetrahedron
+    //for each of 4 faces it is checked if a point is located on the same side as the 4th vertex
+    __device__ inline bool isPointInsideTet(const Point3 &pt, const Point3 *tet){
+        const Point3 AB = tet[1] - tet[0];
+        const Point3 AC = tet[2] - tet[0];
+        const Point3 AD = tet[3] - tet[0];
+        const Point3 BC = tet[2] - tet[1];
+        const Point3 BD = tet[3] - tet[1];
+        const Point3 AP = pt - tet[0];
+        const Point3 BP = pt - tet[1];
+
+        const Point3 n1 = cross(AB, AC);
+        if(sign(dot(n1, AP) != sign(dot(n1, AD))))
+            return false;
+
+        const Point3 n2 = cross(AB, AD);
+        if(sign(dot(n2, AP) != sign(dot(n2, AC))))
+            return false;
+
+        const Point3 n3 = cross(AC, AD);
+        if(sign(dot(n3, AP) != sign(dot(n3, AB))))
+            return false;
+
+        const Point3 n4 = cross(BC, BD);
+        if(sign(dot(n4, BP) != sign(dot(n4, -AB))))
+            return false;
+
+        return true;
+    }
+
     __host__ __device__ inline double distance(const Point2 &from, const Point2 &to){
         return sqrt((from.x - to.x) * (from.x - to.x) + (from.y - to.y) * (from.y - to.y));
     }

@@ -15,6 +15,8 @@ public:
     void seedParticles();
     void initParticleVelocity(const deviceVector<double*> &velocitySolution);
 
+    void advectParticles(const deviceVector<double*> &velocitySolution, double timeStep, int particleSubsteps);
+
     void correctParticleVelocity(const deviceVector<double*> &velocitySolution, const deviceVector<double*> &velocitySolutionOld);
 
     void projectVelocityOntoGrid(deviceVector<double*> &velocity);
@@ -28,6 +30,9 @@ public:
     }
 
 private:
+    void sortParticlesInCells();
+    void checkParticleDistribution(const deviceVector<double*> &velocitySolution);
+
     const Mesh3D *mesh;
         
     deviceVector<Particle3D> particles;

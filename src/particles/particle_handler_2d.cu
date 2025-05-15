@@ -204,7 +204,7 @@ __global__ void kAddParticlesToCell(int n, const Point2 *vertices, const uint3 *
             if(particleCountInSubcells[idx * particlesPerCell + i] == 0)
                 ++particlesToBeAddedInCell;
 
-        if(particlesToBeAddedInCell){    
+        if(particlesToBeAddedInCell){
             const uint3 triangle = cells[idx];
 
             Point2 triangleVertices[3];

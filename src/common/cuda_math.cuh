@@ -94,6 +94,10 @@ __host__ __device__ inline Point3 operator*(double a, const Point3 &v){
     return Point3({ v.x * a, v.y * a, v.z * a });
 }
 
+__host__ __device__ inline Point3 operator-(const Point3 &v){
+    return Point3({ -v.x, -v.y, -v.z });
+}
+
 __host__ __device__ inline double dot(const Point3 &v1, const Point3 &v2){
     return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
 }
