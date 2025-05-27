@@ -106,6 +106,12 @@ __host__ __device__ inline Point3 cross(const Point3 &v1, const Point3 &v2){
     return Point3({ v1.y * v2.z - v1.z * v2.y, v1.z * v2.x - v1.x * v2.z, v1.x * v2.y - v1.y * v2.x });
 }
 
+__host__ __device__ inline void operator+=(Point3 &v, const Point3 &a){
+    v.x += a.x;
+    v.y += a.y;
+    v.z += a.z;
+}
+
 __host__ __device__ inline Point4 operator+(const Point4 &v1, const Point4 &v2){
     return Point4({ v1.x + v2.x, v1.y + v2.y, v1.z + v2.z, v1.w + v2.w });
 }
