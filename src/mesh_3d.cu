@@ -30,7 +30,7 @@ __global__ void kCalculateInvJacobi(int n, const Point3 *vertices, const uint4 *
         const Point3 v43 = vertices[tetrahedron.z] - vertices[tetrahedron.w];
 
         GenericMatrix3x3 Jacobi(v41, v42, v43);
-        invJacobi[idx] = Jacobi.inverse();
+        invJacobi[idx] = Jacobi.inverse().transpose();
     }
 }
 
@@ -40,7 +40,7 @@ __global__ void kFindNeighbors(int n, const uint4 *cells, int *cellNeighborsOffs
     __shared__ uint4 sharedCells[gpuThreadsMax];
 
     unsigned int neighborCount = 0;
-    int offset = cellNeighborsOffsets[idx];
+    int offset = (cellNeighborIndices && (idx < n)) ? cellNeighborsOffsets[idx] : 0;
 
     for(int blockStart = 0; blockStart < n; blockStart += gpuThreadsMax){
         //load batch of cell data into shared memory

@@ -152,7 +152,7 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point3* vertices, cons
         const int4 boundaryIDs = faceBoundaryIDs[idx];
         for (int face = 0; face < 4; ++face) {
             const int boundaryID = *(&boundaryIDs.x + face);
-            if (boundaryID == -1)
+            if (boundaryID != 0 && boundaryID != 1)
                 continue;
 
             const Point3 normalVec = normalVector(boundaryID);
@@ -259,7 +259,7 @@ __global__ void kIntegrateVelocityCorrection(int n, const Point3* vertices, cons
         const GenericMatrix3x3 cellInvJacobi = invJacobi[idx];
 
         GenericMatrix4x4 localMatrix[3];
-        Vector4 localRhs[2];
+        Vector4 localRhs[3];
 
         double aux, aux2, pressureValue;
 
