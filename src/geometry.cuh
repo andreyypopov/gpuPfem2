@@ -70,19 +70,19 @@ namespace GEOMETRY
         const Point3 BP = pt - tet[1];
 
         const Point3 n1 = cross(AB, AC);
-        if(sign(dot(n1, AP) != sign(dot(n1, AD))))
+        if(sign(dot(n1, AP)) != sign(dot(n1, AD)))
             return false;
 
         const Point3 n2 = cross(AB, AD);
-        if(sign(dot(n2, AP) != sign(dot(n2, AC))))
+        if(sign(dot(n2, AP)) != sign(dot(n2, AC)))
             return false;
 
         const Point3 n3 = cross(AC, AD);
-        if(sign(dot(n3, AP) != sign(dot(n3, AB))))
+        if(sign(dot(n3, AP)) != sign(dot(n3, AB)))
             return false;
 
         const Point3 n4 = cross(BC, BD);
-        if(sign(dot(n4, BP) != sign(dot(n4, -AB))))
+        if(sign(dot(n4, BP)) != sign(dot(n4, -AB)))
             return false;
 
         return true;
