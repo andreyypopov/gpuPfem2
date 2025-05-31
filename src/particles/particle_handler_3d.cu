@@ -44,7 +44,7 @@ __device__ int determineSubcell3D(const Point4 localCoords){
             subcellVertices[vert] = lowerLeft + subtetStep * unitCubeVertices[*(&unitCubeTetVertexIndices[tetIndex].x + vert)];
 
         if(GEOMETRY::isPointInsideTet(pt, subcellVertices)){
-            res = tetIndex;
+            res = tet;
             break;
         }
     }
