@@ -72,9 +72,9 @@ __global__ void kSetEdgeBoundaryIDs(int n, const Point2 *vertices, const uint3 *
                 *(&res.x + i) = 2;
             else if (std::fabs(middle.y - 1.0) < CONSTANTS::DOUBLE_MIN)
                 *(&res.x + i) = 3;
-
-            edgeBoundaryIDs[idx] = res;
         }
+
+        edgeBoundaryIDs[idx] = res;
     }
 }
 
@@ -510,7 +510,16 @@ int main(int argc, char *argv[]){
 
     pScope.start("Particle seeding");
 
-    ParticleHandler2D particleHandler(&mesh, 2);
+    SimulationParameters hostParams;
+    hostParams.setDefaultParameters();
+    hostParams.dt = 0.01;
+    hostParams.tFinal = 5.0;
+    hostParams.simulationScheme = 0;
+    hostParams.outputFrequency = 10;
+    hostParams.exportParticles = 0;
+    copy_h2const(&hostParams, &simParams, 1);
+
+    ParticleHandler2D particleHandler(&mesh, hostParams);
     particleHandler.seedParticles();
 
     pScope.stop();
@@ -566,15 +575,6 @@ int main(int argc, char *argv[]){
     copy_h2const(&faceGaussPointsNum, &faceQuadraturePointsNum, 1);
     copy_h2const(edgeQuadratureGaussPoints.data(), edgeQuadratureFormula, edgeGaussPointsNum);
     copy_h2const(&edgeGaussPointsNum, &edgeQuadraturePointsNum, 1);
-
-    SimulationParameters hostParams;
-    hostParams.setDefaultParameters();
-    hostParams.dt = 0.01;
-    hostParams.tFinal = 5.0;
-    hostParams.simulationScheme = 0;
-    hostParams.outputFrequency = 10;
-    hostParams.exportParticles = 0;
-    copy_h2const(&hostParams, &simParams, 1);
 
     //matrices, solution and right-hand-side vectors for both component of velocity field (prediction and final ones) and pressure
     std::array<SparseMatrixCSR, 2> velocityCorrectionMatrix;
@@ -637,8 +637,10 @@ int main(int argc, char *argv[]){
     DataExport dataExport(mesh, &particleHandler);
     dataExport.addScalarDataVector(velocitySolution[0], "velX");
     dataExport.addScalarDataVector(velocitySolution[1], "velY");
-    dataExport.addScalarDataVector(velocityPrediction[0], "velPredictionX");
-    dataExport.addScalarDataVector(velocityPrediction[1], "velPredictionY");
+    if (hostParams.exportPredictionVelocity) {
+        dataExport.addScalarDataVector(velocityPrediction[0], "velPredictionX");
+        dataExport.addScalarDataVector(velocityPrediction[1], "velPredictionY");
+    }
     dataExport.addScalarDataVector(pressureSolution, "pressure");
     
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");

@@ -45,7 +45,7 @@ __device__ Point3 normalVector(int boundaryID) {
     case 5:
         return { 0.0, 0.0, 1.0 };
     default:
-        return { 0.0, 0.0 };
+        return { 0.0, 0.0, 0.0 };
     }
 }
 
@@ -69,7 +69,7 @@ __global__ void kSetFaceBoundaryIDs(int n, const Point3 *vertices, const uint4 *
             for (int vert = 0; vert < 3; ++vert)
                 faceVertices[vert] = tetVertices[(i + vert) % 4];
             
-            const Point3 faceCenter = CONSTANTS::ONE_THIRD * (faceVertices[0] + faceVertices[1] + faceVertices[2] + faceVertices[3]);
+            const Point3 faceCenter = CONSTANTS::ONE_THIRD * (faceVertices[0] + faceVertices[1] + faceVertices[2]);
 
             if (std::fabs(faceCenter.x - (-5.0)) < CONSTANTS::DOUBLE_MIN)
                 *(&res.x + i) = 0;
@@ -83,9 +83,9 @@ __global__ void kSetFaceBoundaryIDs(int n, const Point3 *vertices, const uint4 *
                 *(&res.x + i) = 4;
             else if (std::fabs(faceCenter.z - 1.0) < CONSTANTS::DOUBLE_MIN)
                 *(&res.x + i) = 5;
-
-            faceBoundaryIDs[idx] = res;
         }
+
+        faceBoundaryIDs[idx] = res;
     }
 }
 
@@ -535,9 +535,19 @@ int main(int argc, char *argv[]){
 
     pScope.stop();
 
+    SimulationParameters hostParams;
+    hostParams.setDefaultParameters();
+    hostParams.dt = 0.01;
+    hostParams.tFinal = 5.0;
+    hostParams.simulationScheme = 0;
+    hostParams.outputFrequency = 10;
+    hostParams.exportParticles = 0;
+    hostParams.exportParticleStatistics = 1;
+    copy_h2const(&hostParams, &simParams, 1);
+
     pScope.start("Particle seeding");
 
-    ParticleHandler3D particleHandler(&mesh, 2);
+    ParticleHandler3D particleHandler(&mesh, hostParams);
     particleHandler.seedParticles();
 
     pScope.stop();
@@ -598,15 +608,6 @@ int main(int argc, char *argv[]){
     copy_h2const(&cellGaussPointsNum, &cellQuadraturePointsNum, 1);
     copy_h2const(faceQuadratureGaussPoints.data(), faceQuadratureFormula, faceGaussPointsNum);
     copy_h2const(&faceGaussPointsNum, &faceQuadraturePointsNum, 1);
-
-    SimulationParameters hostParams;
-    hostParams.setDefaultParameters();
-    hostParams.dt = 0.01;
-    hostParams.tFinal = 5.0;
-    hostParams.simulationScheme = 0;
-    hostParams.outputFrequency = 10;
-    hostParams.exportParticles = 0;
-    copy_h2const(&hostParams, &simParams, 1);
 
     //matrices, solution and right-hand-side vectors for both component of velocity field (prediction and final ones) and pressure
     std::array<SparseMatrixCSR, 3> velocityCorrectionMatrix;
@@ -670,9 +671,11 @@ int main(int argc, char *argv[]){
     dataExport.addScalarDataVector(velocitySolution[0], "velX");
     dataExport.addScalarDataVector(velocitySolution[1], "velY");
     dataExport.addScalarDataVector(velocitySolution[2], "velZ");
-    dataExport.addScalarDataVector(velocityPrediction[0], "velPredictionX");
-    dataExport.addScalarDataVector(velocityPrediction[1], "velPredictionY");
-    dataExport.addScalarDataVector(velocityPrediction[2], "velPredictionZ");
+    if (hostParams.exportPredictionVelocity) {
+        dataExport.addScalarDataVector(velocityPrediction[0], "velPredictionX");
+        dataExport.addScalarDataVector(velocityPrediction[1], "velPredictionY");
+        dataExport.addScalarDataVector(velocityPrediction[2], "velPredictionZ");
+    }
     dataExport.addScalarDataVector(pressureSolution, "pressure");
     
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");

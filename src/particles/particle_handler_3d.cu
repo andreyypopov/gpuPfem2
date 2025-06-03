@@ -275,10 +275,10 @@ __global__ void kAddParticlesToCell3D(int n, const Point3 *vertices, const uint4
     }
 }
 
-ParticleHandler3D::ParticleHandler3D(const Mesh3D *mesh_, int cellDivisionLevel)
+ParticleHandler3D::ParticleHandler3D(const Mesh3D *mesh_, SimulationParameters &params)
     : mesh(mesh_)
 {
-    const int subcellsNumber = std::max(std::min(cellDivisionLevel, CONSTANTS::MAX_CELL_DIVISION_LEVEL), 1);
+    const int subcellsNumber = std::max(std::min(params.cellDivisionLevel, CONSTANTS::MAX_CELL_DIVISION_LEVEL), 1);
     const int hostParticlesPerTet = subcellsNumber * subcellsNumber * subcellsNumber;
     const double hostSubcellStep = 1.0 / subcellsNumber;
     copy_h2const(&subcellsNumber, &subtetsPerDim, 1);
@@ -356,6 +356,9 @@ ParticleHandler3D::ParticleHandler3D(const Mesh3D *mesh_, int cellDivisionLevel)
     copy_h2d(hostProjectionVelocityPtrs, projectionVelocityPtrs.data, 3);
 
     particleCountInSubcells.allocate(mesh->getCells().size * hostParticlesPerTet);
+
+    if(params.exportParticleStatistics)
+        particleStatisticsFile = std::ofstream("ParticleCount.dat");
 }
 
 ParticleHandler3D::~ParticleHandler3D()
@@ -364,6 +367,9 @@ ParticleHandler3D::~ParticleHandler3D()
     free_device(particlesForCheckInNeighborCellsCount);
     free_device(particlesToBeDeletedCount);
     free_device(particlesToBeAddedCount);
+
+    if(particleStatisticsFile.has_value())
+        particleStatisticsFile->close();
 }
 
 void ParticleHandler3D::seedParticles()
@@ -382,6 +388,9 @@ void ParticleHandler3D::seedParticles()
     copy_d2h(deviceParticleCount, &particlesSeeded, 1);
 
     printf("Created %d particles\n", particlesSeeded);
+
+    if(particleStatisticsFile.has_value())
+        *particleStatisticsFile << particlesSeeded << std::endl;
 }
 
 void ParticleHandler3D::initParticleVelocity(const deviceVector<double *> &velocitySolution)
@@ -404,6 +413,9 @@ void ParticleHandler3D::advectParticles(const deviceVector<double *> &velocitySo
 
     checkParticleDistribution(velocitySolution);
     printf("Particle handler contains %d particles\n", particleCount);
+
+    if(particleStatisticsFile.has_value())
+        *particleStatisticsFile << particleCount << std::endl;
 }
 
 void ParticleHandler3D::correctParticleVelocity(const deviceVector<double *> &velocitySolution, const deviceVector<double *> &velocitySolutionOld)

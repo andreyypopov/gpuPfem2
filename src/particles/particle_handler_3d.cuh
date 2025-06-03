@@ -5,11 +5,15 @@
 
 #include "../common/device_vector.cuh"
 #include "../mesh_3d.cuh"
+#include "../parameters.cuh"
+
+#include <fstream>
+#include <optional>
 
 class ParticleHandler3D
 {
 public:
-    ParticleHandler3D(const Mesh3D *mesh_, int cellDivisionLevel);
+    ParticleHandler3D(const Mesh3D *mesh_, SimulationParameters &params);
     ~ParticleHandler3D();
 
     void seedParticles();
@@ -51,6 +55,8 @@ private:
     deviceVector<int> particleCountInSubcells;
 
     int particleCount;
+
+    std::optional<std::ofstream> particleStatisticsFile;
 };
 
 #endif // PARTICLE_HANDLER_3D_CUH

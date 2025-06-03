@@ -25,7 +25,7 @@ namespace GEOMETRY
     __device__ inline Point4 transformGlobalToLocal(const Point3 &globalCoord, const GenericMatrix3x3 &invJacobi, const Point3 &v4){
         Point4 res;
         const Point3 drv4 = globalCoord - v4;
-        const Point3 aux = invJacobi * drv4;
+        const Point3 aux = invJacobi.transpose() * drv4;    //invJacobi needs to be transposed here
         res.x = aux.x;
         res.y = aux.y;
         res.z = aux.z;
