@@ -4,9 +4,9 @@ CUDA implementation of the particle finite element method, 2<sup>nd</sup> genera
 
 ## Algorithm
 
-Solution of the 2D problem using PFEM-2. The whole pipeline, including both particle and mesh steps, is working on GPU:
+Solution of 2D and 3D problems using PFEM-2. The whole pipeline, including both particle and mesh steps, is working on GPU:
 
-1. Import of the mesh in DAT format (list of vertices and triangles, can be prepared in SALOME)
+1. Import of the mesh in DAT format (list of vertices and triangles/tetrahedra, can be prepared in SALOME)
 2. Setup of the Dirichlet boundary conditions
 3. Setup of the CSR matrix structure (analysis of the mesh connectivity)
 4. Initial seeding of the particles
@@ -17,13 +17,11 @@ Solution of the 2D problem using PFEM-2. The whole pipeline, including both part
 9. Solution of the linear system using PCG or GMRES with or without a preconditioner (Jacobi, Incomplete LU/Cholesky decomposition)
 10. Correction of particle velocity
 11. Export of results to a VTK (XML-type) file
-12. Calculation of aerodynamic loads and coefficients (drag and lift force) on bodies
-
-Partial support of solution in 3D - only FEM on a tetrahedral Eulerian mesh, without particles.
+12. Calculation of aerodynamic loads and coefficients (drag and lift force) on bodies (only in 2D)
 
 ## Prerequisites
 
-* C++ compiler (tested on MS VC++ 2022 and g++ 9.4.0)
+* C++ compiler (tested on MS VC++ 2022 and g++ 9.4.0, C++ 17 support is required)
 * OpenMP
 * CUDA (version 12; works on 10 as well, if minor changes are made)
 * CMake (3.18 or higher)
@@ -57,6 +55,7 @@ make
 3. Poiseuille flow in a channel
 4. Flow past a cylinder in a channel (test 2D-2 from _Schäfer M., Turek S., Durst F., Krause E., Rannacher R. (1996). Benchmark Computations of Laminar Flow Around a Cylinder_)
 5. Poisson equation in a 3D box
+6. Poiseuille flow in 3D
 
 ## Governing equations and splitting schemes
 
