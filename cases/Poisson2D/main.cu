@@ -7,6 +7,7 @@
 #include "common/gpu_timer.cuh"
 
 #include "integration/numerical_integrator_2d.cuh"
+#include "integration/quadrature_formula_1d.cuh"
 #include "integration/quadrature_formula_2d.cuh"
 
 #include "linear_algebra/linear_algebra.h"

@@ -39,6 +39,8 @@ SET(src_linear_algebra_files
 SET(src_particle_files
 	${PROJECT_SOURCE_PATH}/particles/particle_2d.cu
 	${PROJECT_SOURCE_PATH}/particles/particle_handler_2d.cu
+	${PROJECT_SOURCE_PATH}/particles/particle_3d.cu
+	${PROJECT_SOURCE_PATH}/particles/particle_handler_3d.cu
 	)
 SET(header_files
 	${PROJECT_SOURCE_PATH}/data_export.cuh
@@ -52,6 +54,8 @@ SET(header_files
 SET(header_particle_files
 	${PROJECT_SOURCE_PATH}/particles/particle_2d.cuh
 	${PROJECT_SOURCE_PATH}/particles/particle_handler_2d.cuh
+	${PROJECT_SOURCE_PATH}/particles/particle_3d.cuh
+	${PROJECT_SOURCE_PATH}/particles/particle_handler_3d.cuh
 	)
 SET(header_common_files
 	${PROJECT_SOURCE_PATH}/common/constants.h
@@ -111,6 +115,7 @@ endif()
 add_library(gpuPfem2Lib SHARED ${src_files} ${src_particle_files} ${src_common_files} ${src_integration_files} ${src_linear_algebra_files} ${header_files}
 	${header_particle_files} ${header_common_files} ${header_integration_files} ${header_linear_algebra_files})
 
+prepare_project(${PROJECT_NAME})
 setup_openmp(${PROJECT_NAME})
 setup_cuda(${PROJECT_NAME})
 

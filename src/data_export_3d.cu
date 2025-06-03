@@ -1,7 +1,9 @@
 #include "data_export_3d.cuh"
 
-DataExport3D::DataExport3D(const Mesh3D &mesh)
+DataExport3D::DataExport3D(const Mesh3D &mesh, const ParticleHandler3D *particleHandler)
     : mesh(mesh)
+    , particleHandler(particleHandler)
+    , particleCount(0)
 {
 
 }
@@ -90,4 +92,80 @@ void DataExport3D::exportToVTK(const std::string &filename) const
         printf("Mesh solution saved to %s\n", filename.c_str());
     } else
         printf("Error while saving mesh solution to a file\n");
+}
+
+void DataExport3D::exportParticlesToVTK(const std::string & filename)
+{
+    if(particleCount != particleHandler->getParticleCount()){
+        particleCount = particleHandler->getParticleCount();
+        hostParticles.resize(particleCount);
+    }
+
+    copy_d2h(particleHandler->getParticles(), hostParticles.data(), particleCount);
+
+    std::ofstream outputFile(filename.c_str());
+    if(outputFile.is_open()){
+        //header
+        outputFile << "<?xml version=\"1.0\" ?> " << std::endl;
+        outputFile << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\">" << std::endl;
+        outputFile << "  <UnstructuredGrid>" << std::endl;
+        outputFile << "    <Piece NumberOfPoints=\"" << particleCount <<  "\" NumberOfCells=\"" << particleCount << "\">" << std::endl;
+
+        //positions
+    	outputFile << "      <Points>" << std::endl;
+	    outputFile << "        <DataArray type=\"Float32\" NumberOfComponents=\"3\" Format=\"ascii\">" << std::endl;
+	    for(const auto &particleIndex : hostParticles)
+		    outputFile << "          " << particleIndex.getPosition().x << " " << particleIndex.getPosition().y << " " << particleIndex.getPosition().z << std::endl;
+
+	    outputFile << "        </DataArray>" << std::endl;
+    	outputFile << "      </Points>" << std::endl;
+
+        //cells (equal to particles)
+        outputFile << "      <Cells>" << std::endl;
+        outputFile << "        <DataArray type=\"Int32\" Name=\"connectivity\" Format=\"ascii\">" << std::endl;
+        outputFile << "        ";
+        for (int i = 0; i < particleCount; ++i)
+            outputFile << "  " << i;
+        
+        outputFile << std::endl;
+        outputFile << "        </DataArray>" << std::endl;
+
+        //offsets
+        outputFile << "        <DataArray type=\"Int32\" Name=\"offsets\" Format=\"ascii\">" << std::endl;
+        outputFile << "        ";
+        for (int i = 0; i < particleCount; ++i)
+            outputFile << "  " << i + 1; 
+        
+        outputFile << std::endl;
+        outputFile << "        </DataArray>" << std::endl;
+
+        outputFile << "        <DataArray type=\"Int32\" Name=\"types\" Format=\"ascii\">" << std::endl;
+        outputFile << "        ";
+        for (int i = 0; i < particleCount; ++i)
+            outputFile << "  " << 1;
+        
+        outputFile << std::endl;
+        outputFile << "        </DataArray>" << std::endl;
+        outputFile << "      </Cells>" << std::endl;
+
+        //data in particles (field values)
+	    outputFile << "      <PointData Scalars=\"scalars\">" << std::endl;
+	
+        //velocity
+        outputFile << "        <DataArray type=\"Float32\" Name=\"velocity\" NumberOfComponents=\"3\" Format=\"ascii\">" << std::endl;
+        for(const auto &particleIndex : hostParticles)
+            outputFile << "          " << particleIndex.getVelocity().x << " " << particleIndex.getVelocity().y << " " << particleIndex.getVelocity().z << std::endl;
+        outputFile << "        </DataArray>" << std::endl;
+
+        outputFile << "      </PointData>" << std::endl;
+
+        //footer
+        outputFile << "    </Piece>" << std::endl;
+        outputFile << "  </UnstructuredGrid>" << std::endl;
+        outputFile << "</VTKFile>" << std::endl;
+
+        outputFile.close();
+        printf("Particles saved to %s\n", filename.c_str());
+    } else
+        printf("Error while saving particles to a file\n");
 }

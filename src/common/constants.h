@@ -14,6 +14,7 @@ struct CONSTANTS {
     static constexpr int MAX_GAUSS_POINTS_3D = 31;
     static constexpr int MAX_CELL_DIVISION_LEVEL = 4;
     static constexpr int MAX_PARTICLES_PER_CELL = MAX_CELL_DIVISION_LEVEL * MAX_CELL_DIVISION_LEVEL;
+    static constexpr int MAX_PARTICLES_PER_TET = MAX_CELL_DIVISION_LEVEL * MAX_CELL_DIVISION_LEVEL * MAX_CELL_DIVISION_LEVEL;
 };
 
 #endif // CONSTANTS_H

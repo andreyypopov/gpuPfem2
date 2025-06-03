@@ -40,7 +40,7 @@ __global__ void kFindNeighbors(int n, const uint4 *cells, int *cellNeighborsOffs
     __shared__ uint4 sharedCells[gpuThreadsMax];
 
     unsigned int neighborCount = 0;
-    int offset = cellNeighborsOffsets[idx];
+    int offset = (cellNeighborIndices && (idx < n)) ? cellNeighborsOffsets[idx] : 0;
 
     for(int blockStart = 0; blockStart < n; blockStart += gpuThreadsMax){
         //load batch of cell data into shared memory

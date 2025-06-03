@@ -17,6 +17,7 @@ if(NOT GPUPFEM2LIB_DIR)
 endif()
 
 add_executable(${PROJECT_NAME} main.cu)
+prepare_project(${PROJECT_NAME})
 setup_cuda(${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE "${GPUPFEM2LIB_DIR}/include")

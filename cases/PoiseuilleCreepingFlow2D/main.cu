@@ -69,9 +69,9 @@ __global__ void kSetEdgeBoundaryIDs(int n, const Point2 *vertices, const uint3 *
                 *(&res.x + i) = 2;
             else if (std::fabs(middle.y - 1.0) < CONSTANTS::DOUBLE_MIN)
                 *(&res.x + i) = 3;
-
-            edgeBoundaryIDs[idx] = res;
         }
+        
+		edgeBoundaryIDs[idx] = res;
     }
 }
 
@@ -588,8 +588,10 @@ int main(int argc, char *argv[]){
     DataExport dataExport(mesh);
     dataExport.addScalarDataVector(velocitySolution[0], "velX");
     dataExport.addScalarDataVector(velocitySolution[1], "velY");
-    dataExport.addScalarDataVector(velocityPrediction[0], "velPredictionX");
-    dataExport.addScalarDataVector(velocityPrediction[1], "velPredictionY");
+    if (hostParams.exportPredictionVelocity) {
+        dataExport.addScalarDataVector(velocityPrediction[0], "velPredictionX");
+        dataExport.addScalarDataVector(velocityPrediction[1], "velPredictionY");
+    }
     dataExport.addScalarDataVector(pressureSolution, "pressure");
     
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");

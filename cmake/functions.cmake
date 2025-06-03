@@ -1,4 +1,4 @@
-# additional functions for setup of the integrator2 library and test applications
+# additional functions for setup of the gpuPfem2lib library
 
 macro(setup_cuda target_name)
 	enable_language(CUDA)
@@ -15,4 +15,9 @@ macro(setup_openmp target_name)
 	find_package(OpenMP)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+endmacro()
+
+macro(prepare_project target_name)
+	set_property(TARGET ${target_name} PROPERTY CXX_STANDARD 17)
+	set_property(TARGET ${target_name} PROPERTY CXX_STANDARD_REQUIRED ON)
 endmacro()

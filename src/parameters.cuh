@@ -18,8 +18,11 @@ struct SimulationParameters
     const char* meshFileName;       //!< File name of the input mesh file
     int outputFrequency;            //!< Output data each N frames
     
+    int cellDivisionLevel;          //!< Number of times each cell will be divided for particle seeding
     int particleAdvectionSubsteps;  //!< Number of substeps for particle advection within 1 simulation step
     int exportParticles;            //!< Export particles to VTK (boolean flag)
+    int exportParticleStatistics;   //!< Export number of particles to a text file
+    int exportPredictionVelocity;   //!< Export prediction velocity fields (apart from final velocity, which is always exported)
 
     //loads calculation
     int calculateLoads;             //!< Whether or not loads should be calculated on the body surface
@@ -33,6 +36,7 @@ struct SimulationParameters
 
         tFinal = 10.0;
         dt = 0.01;
+        cellDivisionLevel = 2;
         particleAdvectionSubsteps = 3;
 
         tolerance = 1e-8;
@@ -42,6 +46,8 @@ struct SimulationParameters
         meshFileName = "";
         outputFrequency = 1;
         exportParticles = 0;
+        exportParticleStatistics = 0;
+        exportPredictionVelocity = 0;
 
         calculateLoads = 0;
         bodyBoundaryID = -1;

@@ -204,7 +204,7 @@ __global__ void kAddParticlesToCell(int n, const Point2 *vertices, const uint3 *
             if(particleCountInSubcells[idx * particlesPerCell + i] == 0)
                 ++particlesToBeAddedInCell;
 
-        if(particlesToBeAddedInCell){    
+        if(particlesToBeAddedInCell){
             const uint3 triangle = cells[idx];
 
             Point2 triangleVertices[3];
@@ -235,10 +235,10 @@ __global__ void kAddParticlesToCell(int n, const Point2 *vertices, const uint3 *
     }
 }
 
-ParticleHandler2D::ParticleHandler2D(const Mesh2D *mesh_, int cellDivisionLevel)
+ParticleHandler2D::ParticleHandler2D(const Mesh2D *mesh_, SimulationParameters &params)
     : mesh(mesh_)
 {
-    const int subcellsNumber = std::max(std::min(cellDivisionLevel, CONSTANTS::MAX_CELL_DIVISION_LEVEL), 1);
+    const int subcellsNumber = std::max(std::min(params.cellDivisionLevel, CONSTANTS::MAX_CELL_DIVISION_LEVEL), 1);
     const int hostParticlesPerCell = subcellsNumber * subcellsNumber;
     const double hostSubcellStep = 1.0 / subcellsNumber;
     copy_h2const(&subcellsNumber, &subcellsPerDim, 1);
@@ -291,6 +291,9 @@ ParticleHandler2D::ParticleHandler2D(const Mesh2D *mesh_, int cellDivisionLevel)
     copy_h2d(hostProjectionVelocityPtrs, projectionVelocityPtrs.data, 2);
 
     particleCountInSubcells.allocate(mesh->getCells().size * hostParticlesPerCell);
+
+    if(params.exportParticleStatistics)
+        particleStatisticsFile = std::ofstream("ParticleCount.dat");
 }
 
 ParticleHandler2D::~ParticleHandler2D()
@@ -299,6 +302,9 @@ ParticleHandler2D::~ParticleHandler2D()
     free_device(particlesForCheckInNeighborCellsCount);
     free_device(particlesToBeDeletedCount);
     free_device(particlesToBeAddedCount);
+
+    if(particleStatisticsFile.has_value())
+        particleStatisticsFile->close();
 }
 
 void ParticleHandler2D::seedParticles()
@@ -317,6 +323,9 @@ void ParticleHandler2D::seedParticles()
     copy_d2h(deviceParticleCount, &particlesSeeded, 1);
 
     printf("Created %d particles\n", particlesSeeded);
+
+    if(particleStatisticsFile.has_value())
+        *particleStatisticsFile << particlesSeeded << std::endl;
 }
 
 void ParticleHandler2D::initParticleVelocity(const deviceVector<double*> &velocitySolution)
@@ -339,6 +348,9 @@ void ParticleHandler2D::advectParticles(const deviceVector<double *> &velocitySo
 
     checkParticleDistribution(velocitySolution);
     printf("Particle handler contains %d particles\n", particleCount);
+
+    if(particleStatisticsFile.has_value())
+        *particleStatisticsFile << particleCount << std::endl;
 }
 
 void ParticleHandler2D::correctParticleVelocity(const deviceVector<double *> &velocitySolution, const deviceVector<double *> &velocitySolutionOld)

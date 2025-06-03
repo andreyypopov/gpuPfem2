@@ -25,7 +25,7 @@ namespace GEOMETRY
     __device__ inline Point4 transformGlobalToLocal(const Point3 &globalCoord, const GenericMatrix3x3 &invJacobi, const Point3 &v4){
         Point4 res;
         const Point3 drv4 = globalCoord - v4;
-        const Point3 aux = invJacobi * drv4;
+        const Point3 aux = invJacobi.transpose() * drv4;    //invJacobi needs to be transposed here
         res.x = aux.x;
         res.y = aux.y;
         res.z = aux.z;
@@ -42,6 +42,49 @@ namespace GEOMETRY
         if(localCoord.z > 1.0 + CONSTANTS::DOUBLE_MIN || localCoord.z < -CONSTANTS::DOUBLE_MIN)
             return false;
         
+        return true;
+    }
+
+    __device__ inline bool isPointInsideUnitTet(const Point4 &localCoord){
+        if(localCoord.x > 1.0 + CONSTANTS::DOUBLE_MIN || localCoord.x < -CONSTANTS::DOUBLE_MIN)
+            return false;
+        if(localCoord.y > 1.0 + CONSTANTS::DOUBLE_MIN || localCoord.y < -CONSTANTS::DOUBLE_MIN)
+            return false;
+        if(localCoord.z > 1.0 + CONSTANTS::DOUBLE_MIN || localCoord.z < -CONSTANTS::DOUBLE_MIN)
+            return false;
+        if(localCoord.w > 1.0 + CONSTANTS::DOUBLE_MIN || localCoord.w < -CONSTANTS::DOUBLE_MIN)
+            return false;
+        
+        return true;
+    }
+
+    //check whether a point is inside or outside the arbitrary (not a unit one) tetrahedron
+    //for each of 4 faces it is checked if a point is located on the same side as the 4th vertex
+    __device__ inline bool isPointInsideTet(const Point3 &pt, const Point3 *tet){
+        const Point3 AB = tet[1] - tet[0];
+        const Point3 AC = tet[2] - tet[0];
+        const Point3 AD = tet[3] - tet[0];
+        const Point3 BC = tet[2] - tet[1];
+        const Point3 BD = tet[3] - tet[1];
+        const Point3 AP = pt - tet[0];
+        const Point3 BP = pt - tet[1];
+
+        const Point3 n1 = cross(AB, AC);
+        if(sign(dot(n1, AP)) != sign(dot(n1, AD)))
+            return false;
+
+        const Point3 n2 = cross(AB, AD);
+        if(sign(dot(n2, AP)) != sign(dot(n2, AC)))
+            return false;
+
+        const Point3 n3 = cross(AC, AD);
+        if(sign(dot(n3, AP)) != sign(dot(n3, AB)))
+            return false;
+
+        const Point3 n4 = cross(BC, BD);
+        if(sign(dot(n4, BP)) != sign(dot(n4, -AB)))
+            return false;
+
         return true;
     }
 
