@@ -64,8 +64,8 @@ make
 Navier - Stokes equations and incompressibility equation are solved:
 ```math
 \begin{gather*}
-\rho\left(\frac{\partial\bm{V}}{\partial t} + (\bm{V}\cdot\nabla)\bm{V}\right) = -\nabla p + \nabla\cdot\hat{\tau} + \rho\bm{g},\\
-\nabla\cdot\bm{V}=0,
+\rho\left(\frac{\partial\mathbf{V}}{\partial t} + (\mathbf{V}\cdot\nabla)\mathbf{V}\right) = -\nabla p + \nabla\cdot\hat{\tau} + \rho\mathbf{g},\\
+\nabla\cdot\mathbf{V}=0,
 \end{gather*}
 ```
 where $`\hat{\tau}`$ is the deviatoric stress tensor with following components ($`\mu`$ is the dynamic viscosity coefficient):
@@ -76,32 +76,32 @@ where $`\hat{\tau}`$ is the deviatoric stress tensor with following components (
 Particles are used to simulate advection, whereas the reduced system (without convective term) is solved on the Eulerian mesh using traditional FEM:
 ```math
 \begin{gather*}
-\rho\frac{\partial\bm{V}}{\partial t} = -\nabla p + \nabla\cdot\hat{\tau} + \rho\bm{g},\\
-\nabla\cdot\bm{V}=0.
+\rho\frac{\partial\mathbf{V}}{\partial t} = -\nabla p + \nabla\cdot\hat{\tau} + \rho\mathbf{g},\\
+\nabla\cdot\mathbf{V}=0.
 \end{gather*}
 ```
 
 ### Splitting schemes
 
-Rather than using a monolithic scheme, we adopt a fractional step approach to decouple velocity from pressure. Solution is obtained in 3 steps, which are a bit different depending on how pressure is taken into account (Schemes A and B in _Zienkiwicz O., Taylor R. (2000). The Finite Element Method, Vol. 3: Fluid Dynamics_). Following equations are solved ($`\bm{V}^{n+1/2}`$ is the velocity prediction field):
+Rather than using a monolithic scheme, we adopt a fractional step approach to decouple velocity from pressure. Solution is obtained in 3 steps, which are a bit different depending on how pressure is taken into account (Schemes A and B in _Zienkiwicz O., Taylor R. (2000). The Finite Element Method, Vol. 3: Fluid Dynamics_). Following equations are solved ($`\mathbf{V}^{n+1/2}`$ is the velocity prediction field):
 
 1. Velocity prediction equation
 
-    1.1. Scheme A: $`\rho\dfrac{\bm{V}^{n+1/2} - \bm{V}^n}{\Delta t} = \nabla\cdot\hat{\tau}^* + \rho\bm{g}`$
+    1.1. Scheme A: $`\rho\dfrac{\mathbf{V}^{n+1/2} - \mathbf{V}^n}{\Delta t} = \nabla\cdot\hat{\tau}^* + \rho\mathbf{g}`$
 
-    1.2. Scheme B: $`\rho\dfrac{\bm{V}^{n+1/2} - \bm{V}^n}{\Delta t} = -\nabla p^{n} + \nabla\cdot\hat{\tau}^{n+1/2} + \rho\bm{g}`$
+    1.2. Scheme B: $`\rho\dfrac{\mathbf{V}^{n+1/2} - \mathbf{V}^n}{\Delta t} = -\nabla p^{n} + \nabla\cdot\hat{\tau}^{n+1/2} + \rho\mathbf{g}`$
 
     In $`\hat{\tau}^{n+1/2}`$ component of velocity field corresponding to the equation is approximated implicitly (e.g., $`V_x`$ for the $`x`$ equation), while the other one is approximated explicitly using its known values.
 2. Poisson pressure equation
 
-    2.1. Scheme A: $`\Delta p^{n+1} = \dfrac{\rho}{\Delta t}\nabla\cdot\bm{V}^{n+1/2}`$
+    2.1. Scheme A: $`\Delta p^{n+1} = \dfrac{\rho}{\Delta t}\nabla\cdot\mathbf{V}^{n+1/2}`$
 
-    2.2. Scheme B: $`\Delta p^{n+1} = \Delta p^n + \dfrac{\rho}{\Delta t}\nabla\cdot\bm{V}^{n+1/2}`$
+    2.2. Scheme B: $`\Delta p^{n+1} = \Delta p^n + \dfrac{\rho}{\Delta t}\nabla\cdot\mathbf{V}^{n+1/2}`$
 3. Velocity correction equation
 
-    3.1. Scheme A: $`\rho\dfrac{\bm{V}^{n+1} - \bm{V}^{n+1/2}}{\Delta t} = -\nabla p^{n+1}`$
+    3.1. Scheme A: $`\rho\dfrac{\mathbf{V}^{n+1} - \mathbf{V}^{n+1/2}}{\Delta t} = -\nabla p^{n+1}`$
 
-    3.2. Scheme B: $`\rho\dfrac{\bm{V}^{n+1} - \bm{V}^{n+1/2}}{\Delta t} = -(\nabla p^{n+1} - \nabla p^n)`$
+    3.2. Scheme B: $`\rho\dfrac{\mathbf{V}^{n+1} - \mathbf{V}^{n+1/2}}{\Delta t} = -(\nabla p^{n+1} - \nabla p^n)`$
 
     Actually, it is just an algebraic dependence, not an equation, but as both velocity and pressure values at stores at the same positions (mesh nodes), it is not easy to compute the pressure gradient in a straightforward way. Therefore it is solved using FEM.
 
