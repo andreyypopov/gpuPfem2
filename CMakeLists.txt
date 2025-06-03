@@ -115,9 +115,7 @@ endif()
 add_library(gpuPfem2Lib SHARED ${src_files} ${src_particle_files} ${src_common_files} ${src_integration_files} ${src_linear_algebra_files} ${header_files}
 	${header_particle_files} ${header_common_files} ${header_integration_files} ${header_linear_algebra_files})
 
-set_property(TARGET gpuPfem2Lib PROPERTY CXX_STANDARD 17)
-set_property(TARGET gpuPfem2Lib PROPERTY CXX_STANDARD_REQUIRED ON)
-
+prepare_project(${PROJECT_NAME})
 setup_openmp(${PROJECT_NAME})
 setup_cuda(${PROJECT_NAME})
 
