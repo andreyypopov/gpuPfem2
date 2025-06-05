@@ -146,7 +146,6 @@ public:
         const double detA = det();
         if (fabs(detA) < CONSTANTS::DOUBLE_MIN)
             printf("det = %f\n", detA);
-        //    return res;
 
         const double invdet = 1.0 / detA;
 
