@@ -125,7 +125,7 @@ int main(int argc, char *argv[]){
                 hostBcs.push_back({ i, -2.0 });
         }
 
-        bcs.setupDirichletBCs(hostBcs);
+        bcs.setupDirichletBCs(hostBcs, "solution");
     }
 
     timer.stop("Boundary conditions setup");

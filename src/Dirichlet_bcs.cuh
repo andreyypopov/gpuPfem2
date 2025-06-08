@@ -14,7 +14,7 @@ struct DirichletNode
 class DirichletBCs
 {
 public:
-    void setupDirichletBCs(const std::vector<DirichletNode> &hostBcs);
+    void setupDirichletBCs(const std::vector<DirichletNode> &hostBcs, const std::string &fieldName = std::string());
     void setupNodeMap(int n, const std::vector<DirichletNode> &hostBCs);
 
     void applyBCs(SparseMatrixCSR& matrix, deviceVector<double>& rhs);
@@ -25,7 +25,10 @@ public:
 
 protected:
     deviceVector<DirichletNode> DirichletValues;
-    deviceVector<int> nodesToDirichletNodes; 
+    deviceVector<int> nodesToDirichletNodes;
+
+private:
+    std::string fieldName;
 };
 
 #endif // DirichletBCs_CUH

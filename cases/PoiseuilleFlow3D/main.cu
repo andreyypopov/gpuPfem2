@@ -29,6 +29,15 @@ __constant__ int faceQuadraturePointsNum;
 
 __constant__ SimulationParameters simParams;
 
+std::string velocityFieldName(int component, bool prediction = false) {
+    switch (component) {
+    case 0: return (prediction ? "velPredictionX" : "velX");
+    case 1: return (prediction ? "velPredictionY" : "velY");
+    case 2: return (prediction ? "velPredictionZ" : "velZ");
+    default: return std::string();
+    }
+}
+
 __device__ Point3 normalVector(int boundaryID) {
     switch (boundaryID)
     {
@@ -592,12 +601,12 @@ int main(int argc, char *argv[]){
         }
 
         for (int i = 0; i < 3; ++i) {
-            velocityBCs[i].setupDirichletBCs(hostVelocityBCs[i]);
-            velocityPredictionBCs[i].setupDirichletBCs(hostVelocityBCs[i]);
+            velocityBCs[i].setupDirichletBCs(hostVelocityBCs[i], velocityFieldName(i));
+            velocityPredictionBCs[i].setupDirichletBCs(hostVelocityBCs[i], velocityFieldName(i, true));
             velocityPredictionBCs[i].setMesh(mesh);
             velocityPredictionBCs[i].setupNodeMap(problemSize, hostVelocityBCs[i]);
         }
-        pressureBCs.setupDirichletBCs(hostPressureBCs);
+        pressureBCs.setupDirichletBCs(hostPressureBCs, "pressure");
     }
 
     const auto cellQuadratureGaussPoints = createCellQuadratureFormula(1);
@@ -668,13 +677,10 @@ int main(int argc, char *argv[]){
     velocityCorrectionSolver.init(velocityCorrectionMatrix[0]);
 
     DataExport3D dataExport(mesh, &particleHandler);
-    dataExport.addScalarDataVector(velocitySolution[0], "velX");
-    dataExport.addScalarDataVector(velocitySolution[1], "velY");
-    dataExport.addScalarDataVector(velocitySolution[2], "velZ");
-    if (hostParams.exportPredictionVelocity) {
-        dataExport.addScalarDataVector(velocityPrediction[0], "velPredictionX");
-        dataExport.addScalarDataVector(velocityPrediction[1], "velPredictionY");
-        dataExport.addScalarDataVector(velocityPrediction[2], "velPredictionZ");
+    for (int i = 0; i < 3; ++i) {
+        dataExport.addScalarDataVector(velocitySolution[i], velocityFieldName(i));
+        if (hostParams.exportPredictionVelocity)
+            dataExport.addScalarDataVector(velocityPrediction[i], velocityFieldName(i, true));
     }
     dataExport.addScalarDataVector(pressureSolution, "pressure");
     

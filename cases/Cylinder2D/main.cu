@@ -32,6 +32,14 @@ const Point2 cylinderCenter = { 0.2, 0.2 };
 const double h = 0.41;
 const double l = 2.2;
 
+std::string velocityFieldName(int component, bool prediction = false) {
+    switch (component) {
+    case 0: return (prediction ? "velPredictionX" : "velX");
+    case 1: return (prediction ? "velPredictionY" : "velY");
+    default: return {};
+    }
+}
+
 __global__ void kSetEdgeBoundaryIDs(int n, const Point2 *vertices, const uint3 *cells, int3 *edgeBoundaryIDs)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -703,12 +711,12 @@ int main(int argc, char *argv[]){
         }
 
         for (int i = 0; i < 2; ++i) {
-            velocityBCs[i].setupDirichletBCs(hostVelocityBCs[i]);
-            velocityPredictionBCs[i].setupDirichletBCs(hostVelocityBCs[i]);
+            velocityBCs[i].setupDirichletBCs(hostVelocityBCs[i], velocityFieldName(i));
+            velocityPredictionBCs[i].setupDirichletBCs(hostVelocityBCs[i], velocityFieldName(i, true));
             velocityPredictionBCs[i].setMesh(mesh);
             velocityPredictionBCs[i].setupNodeMap(problemSize, hostVelocityBCs[i]);
         }
-        pressureBCs.setupDirichletBCs(hostPressureBCs);
+        pressureBCs.setupDirichletBCs(hostPressureBCs, "pressure");
     }
 
     const auto faceQuadratureGaussPoints = createFaceQuadratureFormula(1);
