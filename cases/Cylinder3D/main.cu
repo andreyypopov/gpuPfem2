@@ -20,6 +20,7 @@
 
 #include "particles/particle_handler_3d.cuh"
 
+#include <set>
 #include <vector>
 
 __constant__ GaussPoint3D cellQuadratureFormula[CONSTANTS::MAX_GAUSS_POINTS_3D];
@@ -81,7 +82,7 @@ __global__ void kSetFaceBoundaryIDs(int n, const Point3 *vertices, const uint4 *
         for (int i = 0; i < 4; ++i) {
             uint3 face;
             for (int vert = 0; vert < 3; ++vert)
-                *(&face.x + vert) = (i + vert) % 4;
+                *(&face.x + vert) = *(&tet.x + ((i + vert) % 4));
 
             //check whether i-th face is a boundary one
             bool isBoundaryFace = true;
@@ -111,13 +112,13 @@ __global__ void kSetFaceBoundaryIDs(int n, const Point3 *vertices, const uint4 *
             
             const Point3 faceCenter = CONSTANTS::ONE_THIRD * (faceVertices[0] + faceVertices[1] + faceVertices[2]);
 
-            if (std::fabs(faceCenter.x) < CONSTANTS::DOUBLE_MIN)
+            if (abs(faceCenter.x) < CONSTANTS::DOUBLE_MIN)
                 *(&res.x + i) = 0;
-            else if (std::fabs(faceCenter.x - L) < CONSTANTS::DOUBLE_MIN)
+            else if (abs(faceCenter.x - L) < CONSTANTS::DOUBLE_MIN)
                 *(&res.x + i) = 1;
-            else if ((std::fabs(faceCenter.y) < CONSTANTS::DOUBLE_MIN) || (std::fabs(faceCenter.y - H) < CONSTANTS::DOUBLE_MIN))
+            else if ((abs(faceCenter.y) < CONSTANTS::DOUBLE_MIN) || (abs(faceCenter.y - H) < CONSTANTS::DOUBLE_MIN))
                 *(&res.x + i) = 2;
-            else if ((std::fabs(faceCenter.z) < CONSTANTS::DOUBLE_MIN) || (std::fabs(faceCenter.z - H) < CONSTANTS::DOUBLE_MIN))
+            else if ((abs(faceCenter.z) < CONSTANTS::DOUBLE_MIN) || (abs(faceCenter.z - H) < CONSTANTS::DOUBLE_MIN))
                 *(&res.x + i) = 3;
             else //face belongs to the body
                 *(&res.x + i) = 4;
@@ -432,7 +433,7 @@ public:
         const std::array<deviceVector<double>, 3>& velocity, const std::array<deviceVector<double>, 3>& velocityOld);
 
     //assemble matrices and right-hand-side vectors
-	void assembleVelocityPrediction();
+    void assembleVelocityPrediction();
 
     void assemblePressureEquation();
 
@@ -566,7 +567,7 @@ constexpr double inletVelocity(const Point3 &pt)
 }
 
 int main(int argc, char *argv[]){
-	GpuTimer timer;
+    GpuTimer timer;
     ProfilingScope pScope;
     
     pScope.start("Mesh import");
@@ -584,6 +585,7 @@ int main(int argc, char *argv[]){
     SimulationParameters hostParams;
     hostParams.setDefaultParameters();
     hostParams.dt = 0.001;
+    hostParams.mu = 0.0001;
     hostParams.tFinal = 5.001;
     hostParams.simulationScheme = 0;
     hostParams.outputFrequency = 100;
@@ -617,21 +619,52 @@ int main(int argc, char *argv[]){
         hostVelocityBCs[2].reserve(0.1 * vertices.size());
         hostPressureBCs.reserve(0.1 * vertices.size());
 
-        for (unsigned i = 0; i < vertices.size(); ++i) {
-            const Point3& node = vertices[i];
+        std::vector<int4> hostFaceBoundaryIDs(mesh.getCells().size);
+        copy_d2h(mesh.getFaceBoundaryIDs().data, hostFaceBoundaryIDs.data(), mesh.getCells().size);
 
-            if (std::fabs(node.x) < CONSTANTS::DOUBLE_MIN) {
-                hostVelocityBCs[0].push_back({ i, inletVelocity(node) });
-                hostVelocityBCs[1].push_back({ i, 0.0 });
-                hostVelocityBCs[2].push_back({ i, 0.0 });
-            } else if (std::fabs(node.x - L) < CONSTANTS::DOUBLE_MIN)
-                hostPressureBCs.push_back({ i, 0.0 });
-            else if ((std::fabs(node.y) < CONSTANTS::DOUBLE_MIN) || (std::fabs(node.y - H) < CONSTANTS::DOUBLE_MIN) ||
-                (std::fabs(node.z) < CONSTANTS::DOUBLE_MIN) || (std::fabs(node.z - H) < CONSTANTS::DOUBLE_MIN)) {
-                hostVelocityBCs[0].push_back({i, 0.0});
-                hostVelocityBCs[1].push_back({i, 0.0});
-                hostVelocityBCs[2].push_back({i, 0.0});
+        std::set<unsigned int> inletVelocityBoundaryNodes, noSlipBoundaryNodes, pressureBoundaryNodes;
+
+        for (int i = 0; i < mesh.getCells().size; ++i) {
+            const int4 faceIDs = hostFaceBoundaryIDs[i];
+            const uint4 tet = mesh.getHostCells()[i];
+
+            for (int face = 0; face < 4; ++face) {
+                const int boundaryID = *(&faceIDs.x + face);
+                if (boundaryID != -1) {
+                    unsigned int faceVertices[3];
+                    for (int j = 0; j < 3; ++j)
+                        faceVertices[j] = *(&tet.x + ((face + j) % 4));
+
+                    if (boundaryID == 0)
+                        for (int j = 0; j < 3; ++j)
+                            inletVelocityBoundaryNodes.insert(faceVertices[j]);
+                    else if (boundaryID == 1)
+                        for (int j = 0; j < 3; ++j)
+                            pressureBoundaryNodes.insert(faceVertices[j]);
+                    else
+                        for (int j = 0; j < 3; ++j)
+                            noSlipBoundaryNodes.insert(faceVertices[j]);
+                }
             }
+        }
+
+        for (const unsigned int &node : noSlipBoundaryNodes)
+            if (inletVelocityBoundaryNodes.count(node))
+                inletVelocityBoundaryNodes.erase(node);
+
+        for (const unsigned int &node : inletVelocityBoundaryNodes) {
+            hostVelocityBCs[0].push_back({ node, inletVelocity(vertices[node]) });
+            hostVelocityBCs[1].push_back({ node, 0.0 });
+            hostVelocityBCs[2].push_back({ node, 0.0 });
+        }
+
+        for (const unsigned int &node : pressureBoundaryNodes)
+            hostPressureBCs.push_back({ node, 0.0 });
+
+        for (const unsigned int &node : noSlipBoundaryNodes) {
+            hostVelocityBCs[0].push_back({ node, 0.0 });
+            hostVelocityBCs[1].push_back({ node, 0.0 });
+            hostVelocityBCs[2].push_back({ node, 0.0 });
         }
 
         for (int i = 0; i < 3; ++i) {
@@ -657,25 +690,25 @@ int main(int argc, char *argv[]){
     std::array<SparseMatrixCSR, 3> velocityPredictionMatrix;
     SparseMatrixCSR pressureMatrix(mesh);
 
-	std::array<deviceVector<double>, 3> velocitySolution;
+    std::array<deviceVector<double>, 3> velocitySolution;
     std::array<deviceVector<double>, 3> velocitySolutionOld;
-	std::array<deviceVector<double>, 3> velocityPrediction;
-	deviceVector<double> pressureSolution;
+    std::array<deviceVector<double>, 3> velocityPrediction;
+    deviceVector<double> pressureSolution;
     deviceVector<double> pressureSolutionOld;
 
     std::array<deviceVector<double>, 3> velocityCorrectionRhs;
     std::array<deviceVector<double>, 3> velocityPredictionRhs;
     deviceVector<double> pressureRhs;
-	
-	for(int i = 0; i < 3; ++i){
+
+    for(int i = 0; i < 3; ++i){
         velocityCorrectionMatrix[i].initialize(mesh);
         velocityPredictionMatrix[i].initialize(mesh);
         velocitySolution[i].allocate(problemSize);
         velocitySolutionOld[i].allocate(problemSize);
-		velocityPrediction[i].allocate(problemSize);
+        velocityPrediction[i].allocate(problemSize);
         velocityCorrectionRhs[i].allocate(problemSize);
         velocityPredictionRhs[i].allocate(problemSize);
-	}
+    }
     pressureSolution.allocate(problemSize);
     if (hostParams.simulationScheme == 1)
         pressureSolutionOld.allocate(problemSize);
@@ -743,7 +776,7 @@ int main(int argc, char *argv[]){
         if (hostParams.simulationScheme == 1)
             copy_d2d(pressureSolution.data, pressureSolutionOld.data, problemSize);
 
-        for (int nOuterIter = 0; nOuterIter < 1; ++nOuterIter) {
+        for (int nOuterIter = 0; nOuterIter < 2; ++nOuterIter) {
             //assemble and solve velocity prediction equations
             pScope.start("Velocity prediction");
 

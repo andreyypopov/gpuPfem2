@@ -83,6 +83,4 @@ void DirichletBCs::applyBCs(SparseMatrixCSR& matrix, deviceVector<double>& rhs)
     //2. For other rows subtract aij*bcValue from the right hand side element and set aij = 0
     kAccountForBoundaryValues<<<blocks, gpuThreads>>>(DirichletValues.size, DirichletValues.data, matrix.getRowOffset(),
         matrix.getColIndices(), matrix.getMatrixValues(), rhs.data);
-
-    cudaDeviceSynchronize();
 }
