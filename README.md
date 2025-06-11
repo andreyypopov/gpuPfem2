@@ -56,6 +56,7 @@ make
 4. Flow past a cylinder in a channel (test 2D-2 from _Schäfer M., Turek S., Durst F., Krause E., Rannacher R. (1996). Benchmark Computations of Laminar Flow Around a Cylinder_)
 5. Poisson equation in a 3D box
 6. Poiseuille flow in 3D
+7. 3-dimensional flow past a cylinder in a channel - meshes for various bodies (either circular or square section, either domain-wide body or smaller width; formulation similar to tests 3D-2Q and 3D-2Z from _Schäfer M. et al_).
 
 ## Governing equations and splitting schemes
 
