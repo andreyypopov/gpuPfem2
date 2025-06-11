@@ -136,8 +136,8 @@ public:
         const double det = this->det();
 
         GenericMatrix3x3 res;
-        if(fabs(det) < CONSTANTS::DOUBLE_MIN)
-            return res;
+        //if(fabs(det) < CONSTANTS::DOUBLE_MIN)
+        //    return res;
 
         const double invDet = 1.0 / det;
         res(0,0) = invDet * (data[4] * data[8] - data[5] * data[7]);

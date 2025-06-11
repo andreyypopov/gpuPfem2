@@ -50,12 +50,14 @@ __global__ void kAccountForBoundaryValues(int n, const DirichletNode* boundaryVa
     }
 }
 
-void DirichletBCs::setupDirichletBCs(const std::vector<DirichletNode> &hostBcs)
+void DirichletBCs::setupDirichletBCs(const std::vector<DirichletNode> &hostBcs, const std::string &fieldName)
 {
     DirichletValues.allocate(hostBcs.size());
     copy_h2d(hostBcs.data(), DirichletValues.data, hostBcs.size());
 
-    printf("Number of boundary nodes: %zu\n", hostBcs.size());
+    this->fieldName = fieldName;
+
+    printf("Number of boundary nodes for \"%s\" field: %zu\n", fieldName.c_str(), hostBcs.size());
 }
 
 void DirichletBCs::setupNodeMap(int n, const std::vector<DirichletNode> &hostBCs)
@@ -81,6 +83,4 @@ void DirichletBCs::applyBCs(SparseMatrixCSR& matrix, deviceVector<double>& rhs)
     //2. For other rows subtract aij*bcValue from the right hand side element and set aij = 0
     kAccountForBoundaryValues<<<blocks, gpuThreads>>>(DirichletValues.size, DirichletValues.data, matrix.getRowOffset(),
         matrix.getColIndices(), matrix.getMatrixValues(), rhs.data);
-
-    cudaDeviceSynchronize();
 }

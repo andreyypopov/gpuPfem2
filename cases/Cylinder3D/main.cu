@@ -20,6 +20,7 @@
 
 #include "particles/particle_handler_3d.cuh"
 
+#include <set>
 #include <vector>
 
 __constant__ GaussPoint3D cellQuadratureFormula[CONSTANTS::MAX_GAUSS_POINTS_3D];
@@ -29,12 +30,16 @@ __constant__ int faceQuadraturePointsNum;
 
 __constant__ SimulationParameters simParams;
 
+constexpr double H = 0.41;
+constexpr double L = 2.5;
+constexpr double Umax = 2.25;
+
 std::string velocityFieldName(int component, bool prediction = false) {
     switch (component) {
-    case 0: return (prediction ? "velPredictionX" : "velX");
-    case 1: return (prediction ? "velPredictionY" : "velY");
-    case 2: return (prediction ? "velPredictionZ" : "velZ");
-    default: return std::string();
+        case 0: return (prediction ? "velPredictionX" : "velX");
+        case 1: return (prediction ? "velPredictionY" : "velY");
+        case 2: return (prediction ? "velPredictionZ" : "velZ");
+        default: return {};
     }
 }
 
@@ -45,25 +50,25 @@ __device__ Point3 normalVector(int boundaryID) {
         return { -1.0, 0.0, 0.0 };
     case 1:
         return { 1.0, 0.0, 0.0 };
-    case 2:
-        return { 0.0, -1.0, 0.0 };
-    case 3:
-        return { 0.0, 1.0, 0.0 };
-    case 4:
-        return { 0.0, 0.0, -1.0 };
-    case 5:
-        return { 0.0, 0.0, 1.0 };
     default:
         return { 0.0, 0.0, 0.0 };
     }
 }
 
-__global__ void kSetFaceBoundaryIDs(int n, const Point3 *vertices, const uint4 *cells, int4 *faceBoundaryIDs)
+__global__ void kSetFaceBoundaryIDs(int n, const Point3 *vertices, const uint4 *cells, int4 *faceBoundaryIDs,
+    const int *cellNeighborOffsets, const int *cellNeighborIndices)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx < n) {
         const uint4 tet = cells[idx];
+
+        const int neighborBegin = cellNeighborOffsets[idx];
+        const int neighborEnd = cellNeighborOffsets[idx + 1];
+
+        //4 is the number of neighbors for an internal tetrahedral cell
+        if (neighborEnd - neighborBegin == 4)
+            return;
 
         Point3 tetVertices[4];
         tetVertices[0] = vertices[tet.x];
@@ -75,23 +80,48 @@ __global__ void kSetFaceBoundaryIDs(int n, const Point3 *vertices, const uint4 *
         Point3 faceVertices[3];
 
         for (int i = 0; i < 4; ++i) {
+            uint3 face;
+            for (int vert = 0; vert < 3; ++vert)
+                *(&face.x + vert) = *(&tet.x + ((i + vert) % 4));
+
+            //check whether i-th face is a boundary one
+            bool isBoundaryFace = true;
+            for (int neighborCell = neighborBegin; neighborCell != neighborEnd; ++neighborCell) {
+                const int neighborIndex = cellNeighborIndices[neighborCell];
+                const uint4 neighborTet = cells[neighborIndex];
+
+                int commonPoints = 0;
+                for (int j = 0; j < 3; ++j)
+                    for (int k = 0; k < 4; ++k)
+                        if (*(&face.x + j) == *(&neighborTet.x + k))
+                            ++commonPoints;
+
+                //if the face also belongs to a neighboring tetrahedron, it is an internal face (not a boundary one)
+                if (commonPoints == 3) {
+                    isBoundaryFace = false;
+                    break;
+                }
+            }
+
+            if (!isBoundaryFace)
+                continue;
+
+            //determine whether the face lies on the boundary of the domain or belongs to the body
             for (int vert = 0; vert < 3; ++vert)
                 faceVertices[vert] = tetVertices[(i + vert) % 4];
             
             const Point3 faceCenter = CONSTANTS::ONE_THIRD * (faceVertices[0] + faceVertices[1] + faceVertices[2]);
 
-            if (std::fabs(faceCenter.x - (-5.0)) < CONSTANTS::DOUBLE_MIN)
+            if (abs(faceCenter.x) < CONSTANTS::DOUBLE_MIN)
                 *(&res.x + i) = 0;
-            else if (std::fabs(faceCenter.x - 5.0) < CONSTANTS::DOUBLE_MIN)
+            else if (abs(faceCenter.x - L) < CONSTANTS::DOUBLE_MIN)
                 *(&res.x + i) = 1;
-            else if (std::fabs(faceCenter.y - (-1.0)) < CONSTANTS::DOUBLE_MIN)
+            else if ((abs(faceCenter.y) < CONSTANTS::DOUBLE_MIN) || (abs(faceCenter.y - H) < CONSTANTS::DOUBLE_MIN))
                 *(&res.x + i) = 2;
-            else if (std::fabs(faceCenter.y - 1.0) < CONSTANTS::DOUBLE_MIN)
+            else if ((abs(faceCenter.z) < CONSTANTS::DOUBLE_MIN) || (abs(faceCenter.z - H) < CONSTANTS::DOUBLE_MIN))
                 *(&res.x + i) = 3;
-            else if (std::fabs(faceCenter.z) < CONSTANTS::DOUBLE_MIN)
+            else //face belongs to the body
                 *(&res.x + i) = 4;
-            else if (std::fabs(faceCenter.z - 1.0) < CONSTANTS::DOUBLE_MIN)
-                *(&res.x + i) = 5;
         }
 
         faceBoundaryIDs[idx] = res;
@@ -161,7 +191,7 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point3* vertices, cons
         const int4 boundaryIDs = faceBoundaryIDs[idx];
         for (int face = 0; face < 4; ++face) {
             const int boundaryID = *(&boundaryIDs.x + face);
-            if (boundaryID != 0 && boundaryID != 1)
+            if (boundaryID != 1)
                 continue;
 
             const Point3 normalVec = normalVector(boundaryID);
@@ -375,10 +405,10 @@ void VelocityDirichletBCs::setDirichletValues(const DirichletBCs& VelocityBC, co
         numerator.data, denominator.data);
 }
 
-class PoiseuilleFlowIntegrator : public NumericalIntegrator3D
+class Cylinder3DIntegrator : public NumericalIntegrator3D
 {
 public:
-    PoiseuilleFlowIntegrator(const Mesh3D& mesh_)
+    Cylinder3DIntegrator(const Mesh3D& mesh_)
         : NumericalIntegrator3D(mesh_) { };
     
     const auto &getVelocitySolution() const {
@@ -403,7 +433,7 @@ public:
         const std::array<deviceVector<double>, 3>& velocity, const std::array<deviceVector<double>, 3>& velocityOld);
 
     //assemble matrices and right-hand-side vectors
-	void assembleVelocityPrediction();
+    void assembleVelocityPrediction();
 
     void assemblePressureEquation();
 
@@ -433,7 +463,7 @@ private:
     double* pressureMatrixValues;
 };
 
-void PoiseuilleFlowIntegrator::setupVelocityPrediction(std::array<SparseMatrixCSR, 3>& csrMatrix, std::array<deviceVector<double>, 3>& rhsVector, const std::array<deviceVector<double>, 3>& velocity)
+void Cylinder3DIntegrator::setupVelocityPrediction(std::array<SparseMatrixCSR, 3>& csrMatrix, std::array<deviceVector<double>, 3>& rhsVector, const std::array<deviceVector<double>, 3>& velocity)
 {
     double* vel[3];
     const int* rowOffset[3];
@@ -462,7 +492,7 @@ void PoiseuilleFlowIntegrator::setupVelocityPrediction(std::array<SparseMatrixCS
     copy_h2d(matrixValues, velocityPredictionMatrixValues.data, 3);
 }
 
-void PoiseuilleFlowIntegrator::setupPressure(SparseMatrixCSR& csrMatrix, deviceVector<double>& rhsVector, deviceVector<double>& solution, deviceVector<double>& solutionOld)
+void Cylinder3DIntegrator::setupPressure(SparseMatrixCSR& csrMatrix, deviceVector<double>& rhsVector, deviceVector<double>& solution, deviceVector<double>& solutionOld)
 {
     pressure = solution.data;
     pressureOld = solutionOld.data;
@@ -472,7 +502,7 @@ void PoiseuilleFlowIntegrator::setupPressure(SparseMatrixCSR& csrMatrix, deviceV
     pressureMatrixValues = csrMatrix.getMatrixValues();
 }
 
-void PoiseuilleFlowIntegrator::setupVelocityCorrection(std::array<SparseMatrixCSR, 3>& csrMatrix, std::array<deviceVector<double>, 3>& rhsVector,
+void Cylinder3DIntegrator::setupVelocityCorrection(std::array<SparseMatrixCSR, 3>& csrMatrix, std::array<deviceVector<double>, 3>& rhsVector,
     const std::array<deviceVector<double>, 3>& velocity, const std::array<deviceVector<double>, 3>& velocityOld)
 {
     double* vel[3];
@@ -506,7 +536,7 @@ void PoiseuilleFlowIntegrator::setupVelocityCorrection(std::array<SparseMatrixCS
     copy_h2d(matrixValues, velocityCorrectionMatrixValues.data, 3);
 }
 
-void PoiseuilleFlowIntegrator::assembleVelocityPrediction()
+void Cylinder3DIntegrator::assembleVelocityPrediction()
 {
     unsigned int blocks = blocksForSize(mesh.getCells().size);
     kIntegrateVelocityPrediction<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, mesh.getCellVolume().data, mesh.getInvJacobi().data,
@@ -514,14 +544,14 @@ void PoiseuilleFlowIntegrator::assembleVelocityPrediction()
         velocityPredictionColIndices.data, velocityPredictionMatrixValues.data, velocityPredictionRhs.data, pressureOld);
 }
 
-void PoiseuilleFlowIntegrator::assemblePressureEquation()
+void Cylinder3DIntegrator::assemblePressureEquation()
 {
     unsigned int blocks = blocksForSize(mesh.getCells().size);
     kIntegratePressureEquation<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, mesh.getCellVolume().data, mesh.getInvJacobi().data,
         velocityPrediction.data, pressureRowOffset, pressureColIndices, pressureMatrixValues, pressureRhs, pressureOld);
 }
 
-void PoiseuilleFlowIntegrator::assembleVelocityCorrection()
+void Cylinder3DIntegrator::assembleVelocityCorrection()
 {
     unsigned int blocks = blocksForSize(mesh.getCells().size);
     kIntegrateVelocityCorrection<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, mesh.getCellVolume().data, mesh.getInvJacobi().data,
@@ -529,27 +559,36 @@ void PoiseuilleFlowIntegrator::assembleVelocityCorrection()
         velocityCorrectionMatrixValues.data, velocityCorrectionRhs.data, pressureOld);
 }
 
+constexpr double inletVelocity(const Point3 &pt)
+{
+    const double coeff = 16.0 * Umax / (H * H * H * H);
+
+    return coeff * pt.y * (H - pt.y) * pt.z * (H - pt.z);
+}
+
 int main(int argc, char *argv[]){
-	GpuTimer timer;
+    GpuTimer timer;
     ProfilingScope pScope;
     
     pScope.start("Mesh import");
 
     Mesh3D mesh;
-    if(!mesh.loadMeshFromFile("../ChannelMesh2.dat"))
+    if(!mesh.loadMeshFromFile("../Cube.dat"))
         return EXIT_FAILURE;
 
     unsigned int blocks = blocksForSize(mesh.getCells().size);
-    kSetFaceBoundaryIDs<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data, mesh.getFaceBoundaryIDs().data);
+    kSetFaceBoundaryIDs<<<blocks, gpuThreads>>>(mesh.getCells().size, mesh.getVertices().data, mesh.getCells().data,
+        mesh.getFaceBoundaryIDs().data, mesh.getCellNeighborsOffsets().data, mesh.getCellNeighborIndices().data);
 
     pScope.stop();
 
     SimulationParameters hostParams;
     hostParams.setDefaultParameters();
-    hostParams.dt = 0.01;
-    hostParams.tFinal = 5.0;
+    hostParams.dt = 0.001;
+    hostParams.mu = 0.0001;
+    hostParams.tFinal = 5.001;
     hostParams.simulationScheme = 0;
-    hostParams.outputFrequency = 10;
+    hostParams.outputFrequency = 100;
     hostParams.exportParticles = 0;
     hostParams.exportParticleStatistics = 1;
     copy_h2const(&hostParams, &simParams, 1);
@@ -580,24 +619,52 @@ int main(int argc, char *argv[]){
         hostVelocityBCs[2].reserve(0.1 * vertices.size());
         hostPressureBCs.reserve(0.1 * vertices.size());
 
-        for (unsigned i = 0; i < vertices.size(); ++i) {
-            const Point3& node = vertices[i];
+        std::vector<int4> hostFaceBoundaryIDs(mesh.getCells().size);
+        copy_d2h(mesh.getFaceBoundaryIDs().data, hostFaceBoundaryIDs.data(), mesh.getCells().size);
 
-            if (std::fabs(node.x - (-5.0)) < CONSTANTS::DOUBLE_MIN) {
-                //option 1 (velocity-driven, constant velocity)
-                //hostVelocityBCs[0].push_back({ i, 1.0 });
-                //hostVelocityBCs[1].push_back({ i, 0.0 });
-                //hostVelocityBCs[2].push_back({ i, 0.0 });
-                //option 2 (pressure-driven)
-                hostPressureBCs.push_back({ i, 10.0 });
-            } else if (std::fabs(node.x - 5.0) < CONSTANTS::DOUBLE_MIN)
-                hostPressureBCs.push_back({ i, 0.0 });
-            else if ((std::fabs(node.y - (-1.0)) < CONSTANTS::DOUBLE_MIN) || (std::fabs(node.y - 1.0) < CONSTANTS::DOUBLE_MIN) ||
-                (std::fabs(node.z) < CONSTANTS::DOUBLE_MIN) || (std::fabs(node.z - 1.0) < CONSTANTS::DOUBLE_MIN)) {
-                hostVelocityBCs[0].push_back({i, 0.0});
-                hostVelocityBCs[1].push_back({i, 0.0});
-                hostVelocityBCs[2].push_back({i, 0.0});
+        std::set<unsigned int> inletVelocityBoundaryNodes, noSlipBoundaryNodes, pressureBoundaryNodes;
+
+        for (int i = 0; i < mesh.getCells().size; ++i) {
+            const int4 faceIDs = hostFaceBoundaryIDs[i];
+            const uint4 tet = mesh.getHostCells()[i];
+
+            for (int face = 0; face < 4; ++face) {
+                const int boundaryID = *(&faceIDs.x + face);
+                if (boundaryID != -1) {
+                    unsigned int faceVertices[3];
+                    for (int j = 0; j < 3; ++j)
+                        faceVertices[j] = *(&tet.x + ((face + j) % 4));
+
+                    if (boundaryID == 0)
+                        for (int j = 0; j < 3; ++j)
+                            inletVelocityBoundaryNodes.insert(faceVertices[j]);
+                    else if (boundaryID == 1)
+                        for (int j = 0; j < 3; ++j)
+                            pressureBoundaryNodes.insert(faceVertices[j]);
+                    else
+                        for (int j = 0; j < 3; ++j)
+                            noSlipBoundaryNodes.insert(faceVertices[j]);
+                }
             }
+        }
+
+        for (const unsigned int &node : noSlipBoundaryNodes)
+            if (inletVelocityBoundaryNodes.count(node))
+                inletVelocityBoundaryNodes.erase(node);
+
+        for (const unsigned int &node : inletVelocityBoundaryNodes) {
+            hostVelocityBCs[0].push_back({ node, inletVelocity(vertices[node]) });
+            hostVelocityBCs[1].push_back({ node, 0.0 });
+            hostVelocityBCs[2].push_back({ node, 0.0 });
+        }
+
+        for (const unsigned int &node : pressureBoundaryNodes)
+            hostPressureBCs.push_back({ node, 0.0 });
+
+        for (const unsigned int &node : noSlipBoundaryNodes) {
+            hostVelocityBCs[0].push_back({ node, 0.0 });
+            hostVelocityBCs[1].push_back({ node, 0.0 });
+            hostVelocityBCs[2].push_back({ node, 0.0 });
         }
 
         for (int i = 0; i < 3; ++i) {
@@ -610,9 +677,9 @@ int main(int argc, char *argv[]){
     }
 
     const auto cellQuadratureGaussPoints = createCellQuadratureFormula(1);
-    const auto faceQuadratureGaussPoints = createFaceQuadratureFormula(1);    
+    const auto faceQuadratureGaussPoints = createFaceQuadratureFormula(1);
     const int cellGaussPointsNum = cellQuadratureGaussPoints.size();
-    const int faceGaussPointsNum = faceQuadratureGaussPoints.size();    
+    const int faceGaussPointsNum = faceQuadratureGaussPoints.size();
     copy_h2const(cellQuadratureGaussPoints.data(), cellQuadratureFormula, cellGaussPointsNum);
     copy_h2const(&cellGaussPointsNum, &cellQuadraturePointsNum, 1);
     copy_h2const(faceQuadratureGaussPoints.data(), faceQuadratureFormula, faceGaussPointsNum);
@@ -623,25 +690,25 @@ int main(int argc, char *argv[]){
     std::array<SparseMatrixCSR, 3> velocityPredictionMatrix;
     SparseMatrixCSR pressureMatrix(mesh);
 
-	std::array<deviceVector<double>, 3> velocitySolution;
+    std::array<deviceVector<double>, 3> velocitySolution;
     std::array<deviceVector<double>, 3> velocitySolutionOld;
-	std::array<deviceVector<double>, 3> velocityPrediction;
-	deviceVector<double> pressureSolution;
+    std::array<deviceVector<double>, 3> velocityPrediction;
+    deviceVector<double> pressureSolution;
     deviceVector<double> pressureSolutionOld;
 
     std::array<deviceVector<double>, 3> velocityCorrectionRhs;
     std::array<deviceVector<double>, 3> velocityPredictionRhs;
     deviceVector<double> pressureRhs;
-	
-	for(int i = 0; i < 3; ++i){
+
+    for(int i = 0; i < 3; ++i){
         velocityCorrectionMatrix[i].initialize(mesh);
         velocityPredictionMatrix[i].initialize(mesh);
         velocitySolution[i].allocate(problemSize);
         velocitySolutionOld[i].allocate(problemSize);
-		velocityPrediction[i].allocate(problemSize);
+        velocityPrediction[i].allocate(problemSize);
         velocityCorrectionRhs[i].allocate(problemSize);
         velocityPredictionRhs[i].allocate(problemSize);
-	}
+    }
     pressureSolution.allocate(problemSize);
     if (hostParams.simulationScheme == 1)
         pressureSolutionOld.allocate(problemSize);
@@ -656,7 +723,7 @@ int main(int argc, char *argv[]){
     if (hostParams.simulationScheme == 1)
         pressureSolutionOld.clearValues();
 
-    PoiseuilleFlowIntegrator integrator(mesh);
+    Cylinder3DIntegrator integrator(mesh);
     integrator.setupVelocityPrediction(velocityPredictionMatrix, velocityPredictionRhs, velocityPrediction);
     integrator.setupPressure(pressureMatrix, pressureRhs, pressureSolution, pressureSolutionOld);
     integrator.setupVelocityCorrection(velocityCorrectionMatrix, velocityCorrectionRhs, velocitySolution, velocitySolutionOld);
@@ -709,7 +776,7 @@ int main(int argc, char *argv[]){
         if (hostParams.simulationScheme == 1)
             copy_d2d(pressureSolution.data, pressureSolutionOld.data, problemSize);
 
-        for (int nOuterIter = 0; nOuterIter < 1; ++nOuterIter) {
+        for (int nOuterIter = 0; nOuterIter < 2; ++nOuterIter) {
             //assemble and solve velocity prediction equations
             pScope.start("Velocity prediction");
 

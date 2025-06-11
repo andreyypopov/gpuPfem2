@@ -29,6 +29,14 @@ __constant__ int edgeQuadraturePointsNum;
 
 __constant__ SimulationParameters simParams;
 
+std::string velocityFieldName(int component, bool prediction = false) {
+    switch (component) {
+    case 0: return (prediction ? "velPredictionX" : "velX");
+    case 1: return (prediction ? "velPredictionY" : "velY");
+    default: return std::string();
+    }
+}
+
 __device__ Point2 normalVector(int boundaryID) {
     switch (boundaryID)
     {
@@ -559,12 +567,12 @@ int main(int argc, char *argv[]){
         }
 
         for (int i = 0; i < 2; ++i) {
-            velocityBCs[i].setupDirichletBCs(hostVelocityBCs[i]);
-            velocityPredictionBCs[i].setupDirichletBCs(hostVelocityBCs[i]);
+            velocityBCs[i].setupDirichletBCs(hostVelocityBCs[i], velocityFieldName(i));
+            velocityPredictionBCs[i].setupDirichletBCs(hostVelocityBCs[i], velocityFieldName(i, true));
             velocityPredictionBCs[i].setMesh(mesh);
             velocityPredictionBCs[i].setupNodeMap(problemSize, hostVelocityBCs[i]);
         }
-        pressureBCs.setupDirichletBCs(hostPressureBCs);
+        pressureBCs.setupDirichletBCs(hostPressureBCs, "pressure");
     }
 
     const auto faceQuadratureGaussPoints = createFaceQuadratureFormula(1);
