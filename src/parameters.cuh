@@ -19,6 +19,7 @@ struct SimulationParameters
     int outputFrequency;            //!< Output data each N frames
     
     int cellDivisionLevel;          //!< Number of times each cell will be divided for particle seeding
+    int maxParticlesPerSubCell;     //!< Maximum number of particles per subcell (excessive particles will be deleted)
     int particleAdvectionSubsteps;  //!< Number of substeps for particle advection within 1 simulation step
     int exportParticles;            //!< Export particles to VTK (boolean flag)
     int exportParticleStatistics;   //!< Export number of particles to a text file
@@ -37,6 +38,7 @@ struct SimulationParameters
         tFinal = 10.0;
         dt = 0.01;
         cellDivisionLevel = 2;
+        maxParticlesPerSubCell = 3;
         particleAdvectionSubsteps = 3;
 
         tolerance = 1e-8;

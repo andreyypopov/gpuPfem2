@@ -6,6 +6,7 @@ __constant__ Point3 subcellCenters[CONSTANTS::MAX_PARTICLES_PER_CELL];
 __constant__ int particlesPerCell;
 __constant__ int subcellsPerDim;
 __constant__ double subcellStep;
+__constant__ int maxParticlesPerSubcell;
 
 __device__ int determineSubcell(const Point3 localCoords){
     int res = 0;
@@ -170,13 +171,18 @@ __global__ void kDeleteParticles(int n, Particle2D *particles, int *particleCoun
     }
 }
 
-__global__ void kCountParticlesInSubcells(int n, Particle2D *particles, int *particleCountInSubcells)
+__global__ void kCountParticlesInSubcells(int n, Particle2D *particles, int *particleCountInSubcells, int *particlesToBeDeletedCount, int *particlesToBeDeleted)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if(idx < n){
         const Particle2D &particle = particles[idx];
         const int subcellIndex = determineSubcell(particle.getLocalPosition());
-        atomicAdd(particleCountInSubcells + particle.getCellID() * particlesPerCell + subcellIndex, 1);
+        const int oldCount = atomicAdd(particleCountInSubcells + particle.getCellID() * particlesPerCell + subcellIndex, 1);
+
+        if(maxParticlesPerSubcell && oldCount >= maxParticlesPerSubcell){
+            int index = atomicAdd(particlesToBeDeletedCount, 1);
+            particlesToBeDeleted[index] = idx;
+        }
     }
 }
 
@@ -244,6 +250,7 @@ ParticleHandler2D::ParticleHandler2D(const Mesh2D *mesh_, SimulationParameters &
     copy_h2const(&subcellsNumber, &subcellsPerDim, 1);
     copy_h2const(&hostParticlesPerCell, &particlesPerCell, 1);
     copy_h2const(&hostSubcellStep, &subcellStep, 1);
+    copy_h2const(&params.maxParticlesPerSubCell, &maxParticlesPerSubcell, 1);
 
     std::vector<Point3> hostSubcellCenters(hostParticlesPerCell);
 
@@ -409,11 +416,13 @@ void ParticleHandler2D::sortParticlesInCells()
 void ParticleHandler2D::checkParticleDistribution(const deviceVector<double*>& velocitySolution)
 {
     zero_value_device(particlesToBeAddedCount, 1);
+    zero_value_device(particlesToBeDeletedCount, 1);
     particleCountInSubcells.clearValues();
 
     //1. Count the number of particles in subcells of each cell
+    //If there is a limit on number of particles per subcell, mark excessive particles for deletion
     unsigned int blocks = blocksForSize(particleCount);
-    kCountParticlesInSubcells<<<blocks, gpuThreads>>>(particleCount, particles.data, particleCountInSubcells.data);
+    kCountParticlesInSubcells<<<blocks, gpuThreads>>>(particleCount, particles.data, particleCountInSubcells.data, particlesToBeDeletedCount, particlesToBeDeleted.data);
 
     //2. Calculate the overall number of particles to be added
     blocks = blocksForSize(mesh->getCells().size);
@@ -431,5 +440,17 @@ void ParticleHandler2D::checkParticleDistribution(const deviceVector<double*>& v
 
         kAddParticlesToCell<<<blocks, gpuThreads>>>(mesh->getCells().size, mesh->getVertices().data, mesh->getCells().data,
             particles.data, deviceParticleCount, particleCountInSubcells.data, velocitySolution.data);
+    }
+    
+    //4. If there is limit on number of particles per subcell and extra particles exceeding this limit, delete these particles    
+    int hostParticlesToBeDeletedCount;
+    copy_d2h(particlesToBeDeletedCount, &hostParticlesToBeDeletedCount, 1);
+
+    if(hostParticlesToBeDeletedCount){
+        blocks = blocksForSize(hostParticlesToBeDeletedCount);
+        kDeleteParticles<<<blocks, gpuThreads>>>(hostParticlesToBeDeletedCount, particles.data, deviceParticleCount, particlesToBeDeleted.data);
+
+        particleCount -= hostParticlesToBeDeletedCount;
+        copy_h2d(&particleCount, deviceParticleCount, 1);
     }
 }
