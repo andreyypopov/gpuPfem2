@@ -30,14 +30,14 @@ __constant__ int faceQuadraturePointsNum;
 
 __constant__ SimulationParameters simParams;
 
-constexpr double xMin = -3.0;
-constexpr double xMax = 10.0;
-constexpr double yMin = -3.0;
-constexpr double yMax = 3.0;
-constexpr double zMin = -3.0;
-constexpr double zMax = 3.0;
-constexpr double Umean = 10.0;
-constexpr double angle = CONSTANTS::PI / 180.0 * 10.0;
+constexpr double xMin = -3.0;                           //inlet
+constexpr double xMax = 10.0;                           //outlet
+constexpr double yMin = -3.0;                           //bottom of domain
+constexpr double yMax = 3.0;                            //top of domain
+constexpr double zMin = -3.0;                           //back boundary
+constexpr double zMax = 3.0;                            //front boundary
+constexpr double Umag = 10.0;                           //magnitude of inlet velocity
+constexpr double angle = CONSTANTS::PI / 180.0 * 10.0;  //angle of attack
 
 std::string velocityFieldName(int component, bool prediction = false) {
     switch (component) {
@@ -125,17 +125,17 @@ __global__ void kSetFaceBoundaryIDs(int n, const Point3 *vertices, const uint4 *
             
             const Point3 faceCenter = CONSTANTS::ONE_THIRD * (faceVertices[0] + faceVertices[1] + faceVertices[2]);
 
-            if (abs(faceCenter.x - xMin) < CONSTANTS::DOUBLE_MIN)
+            if (abs(faceCenter.x - xMin) < CONSTANTS::DOUBLE_MIN)       //inlet face
                 *(&res.x + i) = 0;
-            else if (abs(faceCenter.x - xMax) < CONSTANTS::DOUBLE_MIN)
+            else if (abs(faceCenter.x - xMax) < CONSTANTS::DOUBLE_MIN)  //outlet face
                 *(&res.x + i) = 1;
-            else if (abs(faceCenter.y - yMin) < CONSTANTS::DOUBLE_MIN)
+            else if (abs(faceCenter.y - yMin) < CONSTANTS::DOUBLE_MIN)  //face belongs to the bottom of domain
                 *(&res.x + i) = 2;
-            else if (abs(faceCenter.y - yMax) < CONSTANTS::DOUBLE_MIN)
+            else if (abs(faceCenter.y - yMax) < CONSTANTS::DOUBLE_MIN)  //face belongs to the top of domain
                 *(&res.x + i) = 3;
-            else if (abs(faceCenter.z - zMin) < CONSTANTS::DOUBLE_MIN)
+            else if (abs(faceCenter.z - zMin) < CONSTANTS::DOUBLE_MIN)  //face belongs to the back boundary of domain
                 *(&res.x + i) = 4;
-            else if (abs(faceCenter.z - zMax) < CONSTANTS::DOUBLE_MIN)
+            else if (abs(faceCenter.z - zMax) < CONSTANTS::DOUBLE_MIN)  //face belongs to the front boundary of domain
                 *(&res.x + i) = 5;
             else //face belongs to the body
                 *(&res.x + i) = 6;
@@ -578,7 +578,7 @@ void nacaAirfoilIntegrator::assembleVelocityCorrection()
 
 constexpr double inletVelocity(const Point3 &pt)
 {
-    const double coeff = 36.0 * Umean / ((yMax - yMin) * (yMax - yMin) * (zMax - zMin) * (zMax - zMin));
+    const double coeff = 36.0 * Umag / ((yMax - yMin) * (yMax - yMin) * (zMax - zMin) * (zMax - zMin));
 
     return coeff * (yMax - pt.y) * (pt.y - yMin) * (zMax - pt.z) * (pt.z - zMin);
 }
@@ -653,13 +653,13 @@ int main(int argc, char *argv[]){
                     for (int j = 0; j < 3; ++j)
                         faceVertices[j] = *(&tet.x + ((face + j) % 4));
 
-                    if (boundaryID == 0 || boundaryID == 2)
+                    if (boundaryID == 0 || boundaryID == 2) //flow comes from the inlet boundary and bottom of domain
                         for (int j = 0; j < 3; ++j)
                             inletVelocityBoundaryNodes.insert(faceVertices[j]);
-                    else if (boundaryID == 1)
+                    else if (boundaryID == 1)               //fixed pressure at the outlet
                         for (int j = 0; j < 3; ++j)
                             pressureBoundaryNodes.insert(faceVertices[j]);
-                    else if (boundaryID == 6)
+                    else if (boundaryID == 6)               //no-slip condition only on the body surface
                         for (int j = 0; j < 3; ++j)
                             noSlipBoundaryNodes.insert(faceVertices[j]);
                 }
@@ -671,8 +671,8 @@ int main(int argc, char *argv[]){
                 inletVelocityBoundaryNodes.erase(node);
 
         for (const unsigned int &node : inletVelocityBoundaryNodes) {
-            hostVelocityBCs[0].push_back({ node, Umean * cos(angle) });
-            hostVelocityBCs[1].push_back({ node, Umean * sin(angle) });
+            hostVelocityBCs[0].push_back({ node, Umag * cos(angle) });
+            hostVelocityBCs[1].push_back({ node, Umag * sin(angle) });
             hostVelocityBCs[2].push_back({ node, 0.0 });
         }
 
