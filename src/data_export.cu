@@ -14,6 +14,17 @@ void DataExport::addScalarDataVector(const deviceVector<double> &dataVector, con
     hostScalarDataVectors[fieldname].resize(mesh.getHostVertices().size());
 }
 
+void DataExport::addVectorDataVector(const deviceVector<double*> &dataVector, const std::string &fieldname)
+{
+    std::vector<double*> hostPointers(2);
+    copy_d2h(dataVector.data, hostPointers.data(), 2);
+
+    for (int i = 0; i < 2; ++i){
+        vectorDataVectors[fieldname][i] = hostPointers[i];
+        hostVectorDataVectors[fieldname][i].resize(mesh.getHostVertices().size());
+    }
+}
+
 void DataExport::exportToVTK(const std::string &filename) const
 {
     std::ofstream outputFile(filename.c_str());
@@ -62,9 +73,11 @@ void DataExport::exportToVTK(const std::string &filename) const
 
         outputFile << "      </Cells>" << std::endl;
 
-        if(!scalarDataVectors.empty()){
+        const bool fieldsAreUsed = !scalarDataVectors.empty() || !vectorDataVectors.empty();
+        if (fieldsAreUsed)
             outputFile << "      <PointData Scalars=\"scalars\">" << std::endl;
 
+        if(!scalarDataVectors.empty())
             for(const auto& it : scalarDataVectors){
                 outputFile << "        <DataArray type=\"Float32\" Name=\"" << it.first << "\" Format=\"ascii\">" << std::endl;
                 outputFile << "        ";
@@ -80,8 +93,22 @@ void DataExport::exportToVTK(const std::string &filename) const
                 outputFile << "        </DataArray>" << std::endl;
             }
 
+        if (!vectorDataVectors.empty())
+            for(const auto& it : vectorDataVectors) {
+                outputFile << "        <DataArray type=\"Float32\" Name=\"" << it.first << "\" NumberOfComponents=\"3\" Format=\"ascii\">" << std::endl;
+
+                const auto &hostData = hostVectorDataVectors.at(it.first);
+                for (int i = 0; i < 2; ++i)
+                    copy_d2h(it.second[i], hostData[i].data(), hostVertices.size());
+
+                for(int i = 0; i < hostVertices.size(); ++i)
+                    outputFile << "          " << hostData[0][i] << " " << hostData[1][i] << " 0.0" << std::endl;
+
+                outputFile << "        </DataArray>" << std::endl;
+            }
+
+        if (fieldsAreUsed)
             outputFile << "      </PointData>" << std::endl;
-        }
 
         //footer
         outputFile << "    </Piece>" << std::endl;

@@ -393,6 +393,10 @@ public:
         return velocitySolutionOld;
     }
 
+    const auto& getVelocityPrediction() const {
+        return velocityPrediction;
+    }
+
     //setup pointers (including device ones)
     void setupVelocityPrediction(std::array<SparseMatrixCSR, 3>& csrMatrix, std::array<deviceVector<double>, 3>& rhsVector,
         const std::array<deviceVector<double>, 3>& velocity);
@@ -677,11 +681,9 @@ int main(int argc, char *argv[]){
     velocityCorrectionSolver.init(velocityCorrectionMatrix[0]);
 
     DataExport3D dataExport(mesh, &particleHandler);
-    for (int i = 0; i < 3; ++i) {
-        dataExport.addScalarDataVector(velocitySolution[i], velocityFieldName(i));
-        if (hostParams.exportPredictionVelocity)
-            dataExport.addScalarDataVector(velocityPrediction[i], velocityFieldName(i, true));
-    }
+    dataExport.addVectorDataVector(integrator.getVelocitySolution(), "velocity");
+    if (hostParams.exportPredictionVelocity)
+        dataExport.addVectorDataVector(integrator.getVelocityPrediction(), "velocityPrediction");
     dataExport.addScalarDataVector(pressureSolution, "pressure");
     
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");

@@ -14,6 +14,8 @@ public:
 
     void addScalarDataVector(const deviceVector<double> &dataVector, const std::string &fieldname);
 
+    void addVectorDataVector(const deviceVector<double*> &dataVector, const std::string &fieldname);
+
     void exportToVTK(const std::string &filename) const;
 
     void exportParticlesToVTK(const std::string &filename);
@@ -24,6 +26,9 @@ private:
 
     std::map<std::string, double*> scalarDataVectors;
     std::map<std::string, std::vector<double>> hostScalarDataVectors;
+
+    std::map<std::string, std::array<double*, 3>> vectorDataVectors;
+    std::map<std::string, std::array<std::vector<double>, 3>> hostVectorDataVectors;
 
     std::vector<Particle3D> hostParticles;
     int particleCount;
