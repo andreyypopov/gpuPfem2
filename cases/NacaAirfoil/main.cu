@@ -1,6 +1,4 @@
-#include "data_export_3d.cuh"
 #include "Dirichlet_bcs.cuh"
-#include "geometry.cuh"
 #include "mesh_3d.cuh"
 #include "parameters.cuh"
 
@@ -19,6 +17,9 @@
 #include "linear_algebra/sparse_matrix.cuh"
 
 #include "particles/particle_handler_3d.cuh"
+
+#include "postprocessing/data_export_3d.cuh"
+#include "postprocessing/postprocessor_3d.cuh"
 
 #include <set>
 #include <vector>
@@ -613,6 +614,7 @@ int main(int argc, char *argv[]){
     hostParams.outputFrequency = 100;
     hostParams.exportParticles = 0;
     hostParams.exportParticleStatistics = 1;
+    hostParams.calculateVorticity = 1;
     copy_h2const(&hostParams, &simParams, 1);
 
     pScope.start("Particle seeding");
@@ -765,12 +767,18 @@ int main(int argc, char *argv[]){
     SolverCG velocityCorrectionSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &JacobiPrecond);
     velocityCorrectionSolver.init(velocityCorrectionMatrix[0]);
 
+    std::optional<PostProcessor3D> postProcessor;
+    if (hostParams.calculateVorticity || hostParams.calculateQcriterion)
+        postProcessor.emplace(mesh, hostParams, integrator.getVelocitySolution().data);
+
     DataExport3D dataExport(mesh, &particleHandler);
     dataExport.addVectorDataVector(integrator.getVelocitySolution(), "velocity");
     if (hostParams.exportPredictionVelocity)
         dataExport.addVectorDataVector(integrator.getVelocityPrediction(), "velocityPrediction");
     dataExport.addScalarDataVector(pressureSolution, "pressure");
-    
+
+    if (hostParams.calculateVorticity)
+        dataExport.addVectorDataVector(postProcessor->getVorticity(), "vorticity");
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");
     if (hostParams.exportParticles)
         dataExport.exportParticlesToVTK("particles" + Utilities::intToString(0) + ".vtu");
@@ -855,6 +863,11 @@ int main(int argc, char *argv[]){
 
         if (step_number % hostParams.outputFrequency == 0) {
             ProfilingScope scope("Results output");
+
+            //if there are fields for postprocessing, it should be performed prior to export
+            if (postProcessor)
+                postProcessor->calculate();
+
             dataExport.exportToVTK("solution" + Utilities::intToString(step_number) + ".vtu");
             if(hostParams.exportParticles)
                 dataExport.exportParticlesToVTK("particles" + Utilities::intToString(step_number) + ".vtu");

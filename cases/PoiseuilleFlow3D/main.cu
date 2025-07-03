@@ -1,6 +1,4 @@
-#include "data_export_3d.cuh"
 #include "Dirichlet_bcs.cuh"
-#include "geometry.cuh"
 #include "mesh_3d.cuh"
 #include "parameters.cuh"
 
@@ -19,6 +17,8 @@
 #include "linear_algebra/sparse_matrix.cuh"
 
 #include "particles/particle_handler_3d.cuh"
+
+#include "postprocessing/data_export_3d.cuh"
 
 #include <vector>
 

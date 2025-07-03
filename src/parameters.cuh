@@ -25,6 +25,10 @@ struct SimulationParameters
     int exportParticleStatistics;   //!< Export number of particles to a text file
     int exportPredictionVelocity;   //!< Export prediction velocity fields (apart from final velocity, which is always exported)
 
+    //postprocessing
+    int calculateVorticity;         //!< Calculate and export the vorticity field
+    int calculateQcriterion;        //!< Calculate and export the Q criterion
+
     //loads calculation
     int calculateLoads;             //!< Whether or not loads should be calculated on the body surface
     int bodyBoundaryID;             //!< ID of the boundary edges to be used for forces calculation on the body surface
@@ -50,6 +54,9 @@ struct SimulationParameters
         exportParticles = 0;
         exportParticleStatistics = 0;
         exportPredictionVelocity = 0;
+
+        calculateVorticity = 0;
+        calculateQcriterion = 0;
 
         calculateLoads = 0;
         bodyBoundaryID = -1;

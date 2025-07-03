@@ -1,4 +1,3 @@
-#include "data_export.cuh"
 #include "Dirichlet_bcs.cuh"
 #include "geometry.cuh"
 #include "mesh_2d.cuh"
@@ -16,6 +15,8 @@
 #include "linear_algebra/linear_solver.cuh"
 #include "linear_algebra/preconditioners.cuh"
 #include "linear_algebra/sparse_matrix.cuh"
+
+#include "postprocessing/data_export.cuh"
 
 #include <vector>
 

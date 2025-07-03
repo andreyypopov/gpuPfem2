@@ -1,8 +1,8 @@
 #ifndef DATA_EXPORT_H
 #define DATA_EXPORT_H
 
-#include "mesh_2d.cuh"
-#include "particles/particle_handler_2d.cuh"
+#include "../mesh_2d.cuh"
+#include "../particles/particle_handler_2d.cuh"
 
 #include <map>
 #include <vector>
