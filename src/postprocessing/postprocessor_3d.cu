@@ -69,6 +69,19 @@ __global__ void kCalculateVorticity(int n, const GenericMatrix3x3 *velocityGradi
     }
 }
 
+__global__ void kCalculateQcriterion(int n, const GenericMatrix3x3 *velocityGradient, double* qCriterion)
+{
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if(idx < n) {
+        const GenericMatrix3x3 nodeVelocityGradient = velocityGradient[idx];
+
+        qCriterion[idx] = -0.5 * (nodeVelocityGradient(0, 0) * nodeVelocityGradient(0, 0) + nodeVelocityGradient(1, 1) * nodeVelocityGradient(1, 1)
+            + nodeVelocityGradient(2, 2) * nodeVelocityGradient(2, 2)) - (nodeVelocityGradient(0, 1) * nodeVelocityGradient(1, 0)
+            + nodeVelocityGradient(0, 2) * nodeVelocityGradient(2, 0) + nodeVelocityGradient(1, 2) * nodeVelocityGradient(2, 1));
+    }
+}
+
 PostProcessor3D::PostProcessor3D(const Mesh3D &mesh_, const SimulationParameters &params, double **velocity_)
     : mesh(mesh_)
     , velocity(velocity_)
@@ -112,4 +125,8 @@ void PostProcessor3D::calculate()
     //2. Calculate vorticity if necessary
     if(vorticityPointers.size)
         kCalculateVorticity<<<blocks, gpuThreads>>>(mesh.getVertices().size, velocityGradient.data, vorticityPointers.data);
+
+    //3. Calculate the Q criterion if necessary
+    if(qCriterion.size)
+        kCalculateQcriterion<<<blocks, gpuThreads>>>(mesh.getVertices().size, velocityGradient.data, qCriterion.data);
 }

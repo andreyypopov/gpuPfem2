@@ -10,6 +10,7 @@ install
 # artefacts
 *.ods
 *.nsys-rep
+*.vtu
 
 # cmake files
 CMakeFiles

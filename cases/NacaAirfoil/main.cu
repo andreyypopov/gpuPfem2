@@ -614,7 +614,8 @@ int main(int argc, char *argv[]){
     hostParams.outputFrequency = 100;
     hostParams.exportParticles = 0;
     hostParams.exportParticleStatistics = 1;
-    hostParams.calculateVorticity = 1;
+    hostParams.calculateVorticity = 0;
+    hostParams.calculateQcriterion = 1;
     copy_h2const(&hostParams, &simParams, 1);
 
     pScope.start("Particle seeding");
@@ -779,6 +780,9 @@ int main(int argc, char *argv[]){
 
     if (hostParams.calculateVorticity)
         dataExport.addVectorDataVector(postProcessor->getVorticity(), "vorticity");
+    if(hostParams.calculateQcriterion)
+        dataExport.addScalarDataVector(postProcessor->getQcriterion(), "Qcriterion");
+
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");
     if (hostParams.exportParticles)
         dataExport.exportParticlesToVTK("particles" + Utilities::intToString(0) + ".vtu");
