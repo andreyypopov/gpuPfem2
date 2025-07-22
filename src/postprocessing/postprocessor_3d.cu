@@ -29,9 +29,11 @@ __global__ void kProjectVelocityGradient(int n, const uint4* cells, double* volu
         for (int vert = 0; vert < 4; ++vert) {
             const unsigned int nodeIndex = *(&tet.x + vert);
 
+            double *velGrad = velocityGradientSum[nodeIndex].rawPointer();
+
             for (int i = 0; i < 3; ++i)
                 for (int j = 0; j < 3; ++j)
-                    atomicAdd((double*)&velocityGradientSum[nodeIndex] + 3 * i + j,  volume * cellVelocityGradient(i, j));
+                    atomicAdd(velGrad + 3 * i + j,  volume * cellVelocityGradient(i, j));
             atomicAdd(&weights[nodeIndex], volume);
         }
     }
@@ -104,6 +106,8 @@ PostProcessor3D::PostProcessor3D(const Mesh3D &mesh_, const SimulationParameters
     }
 
     velocityGradient.allocate(mesh.getVertices().size);
+    velocityGradient.clearValues();
+
     projectionVelocityGradient.allocate(mesh.getVertices().size);
     projectionWeight.allocate(mesh.getVertices().size);
 }

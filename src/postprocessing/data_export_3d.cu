@@ -25,6 +25,12 @@ void DataExport3D::addVectorDataVector(const deviceVector<double*> &dataVector, 
     }
 }
 
+void DataExport3D::addTensorDataVector(const deviceVector<GenericMatrix3x3> &dataVector, const std::string &fieldname)
+{
+    tensorDataVectors[fieldname] = dataVector.data;
+    hostTensorDataVectors[fieldname].resize(mesh.getHostVertices().size());
+}
+
 void DataExport3D::exportToVTK(const std::string &filename) const
 {
     std::ofstream outputFile(filename.c_str());
@@ -73,7 +79,7 @@ void DataExport3D::exportToVTK(const std::string &filename) const
 
         outputFile << "      </Cells>" << std::endl;
 
-        const bool fieldsAreUsed = !scalarDataVectors.empty() || !vectorDataVectors.empty();
+        const bool fieldsAreUsed = !scalarDataVectors.empty() || !vectorDataVectors.empty() || !tensorDataVectors.empty();
         if (fieldsAreUsed)
             outputFile << "      <PointData Scalars=\"scalars\">" << std::endl;
 
@@ -103,6 +109,24 @@ void DataExport3D::exportToVTK(const std::string &filename) const
 
                 for(int i = 0; i < hostVertices.size(); ++i)
                     outputFile << "          " << hostData[0][i] << " " << hostData[1][i] << " " << hostData[2][i] << std::endl;
+
+                outputFile << "        </DataArray>" << std::endl;
+            }
+
+        if (!tensorDataVectors.empty())
+            for(const auto& it : tensorDataVectors) {
+                outputFile << "        <DataArray type=\"Float32\" Name=\"" << it.first << "\" NumberOfComponents=\"9\" Format=\"ascii\">" << std::endl;
+
+                const GenericMatrix3x3 *hostData = hostTensorDataVectors.at(it.first).data();
+                copy_d2h(it.second, hostData, hostVertices.size());
+
+                for(int i = 0; i < hostVertices.size(); ++i){
+                    outputFile << "          ";
+                    for(int k = 0; k < 3; ++k)
+                        for(int l = 0; l < 3; ++l)
+                            outputFile << hostData[i](k, l) << " ";
+                    outputFile << std::endl;
+                }
 
                 outputFile << "        </DataArray>" << std::endl;
             }

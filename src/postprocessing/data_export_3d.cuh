@@ -16,6 +16,8 @@ public:
 
     void addVectorDataVector(const deviceVector<double*> &dataVector, const std::string &fieldname);
 
+    void addTensorDataVector(const deviceVector<GenericMatrix3x3> &dataVector, const std::string &fieldname);
+
     void exportToVTK(const std::string &filename) const;
 
     void exportParticlesToVTK(const std::string &filename);
@@ -29,6 +31,9 @@ private:
 
     std::map<std::string, std::array<double*, 3>> vectorDataVectors;
     std::map<std::string, std::array<std::vector<double>, 3>> hostVectorDataVectors;
+
+    std::map<std::string, GenericMatrix3x3*> tensorDataVectors;
+    std::map<std::string, std::vector<GenericMatrix3x3>> hostTensorDataVectors;
 
     std::vector<Particle3D> hostParticles;
     int particleCount;

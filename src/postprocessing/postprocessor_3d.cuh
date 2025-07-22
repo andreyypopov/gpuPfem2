@@ -11,6 +11,10 @@ public:
 
     void calculate();
 
+    const auto &getVelocityGradient() const {
+        return velocityGradient;
+    }
+
     const auto &getVorticity() const {
         return vorticityPointers;
     }
