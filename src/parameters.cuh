@@ -34,6 +34,8 @@ struct SimulationParameters
     int bodyBoundaryID;             //!< ID of the boundary edges to be used for forces calculation on the body surface
     double thickness;               //!< Body thickness is the z direction
     double meanVelocity;            //!< Mean flow velocity
+    double channelWidth;            //!< Characteristic size of the channel (in 3D)
+    Point3 pointInside;             //!< An arbitrary point inside body (for normals computation)
 
     void setDefaultParameters(){
         rho = 1.0;
@@ -62,6 +64,8 @@ struct SimulationParameters
         bodyBoundaryID = -1;
         thickness = 1.0;
         meanVelocity = 1.0;
+        channelWidth = 1.0;
+        pointInside = { 0.0, 0.0, 0.0 };
     }
 };
 

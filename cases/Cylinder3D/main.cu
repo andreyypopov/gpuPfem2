@@ -19,6 +19,7 @@
 #include "particles/particle_handler_3d.cuh"
 
 #include "postprocessing/data_export_3d.cuh"
+#include "postprocessing/boundary_loads_calculator_3d.cuh"
 
 #include <set>
 #include <vector>
@@ -595,6 +596,12 @@ int main(int argc, char *argv[]){
     hostParams.outputFrequency = 100;
     hostParams.exportParticles = 0;
     hostParams.exportParticleStatistics = 1;
+    hostParams.calculateLoads = 1;
+    hostParams.bodyBoundaryID = 4;
+    hostParams.channelWidth = H;
+    hostParams.thickness = 0.1;
+    hostParams.meanVelocity = 1.0;
+    hostParams.pointInside = { 0.5, 0.2, H/2 };
     copy_h2const(&hostParams, &simParams, 1);
 
     pScope.start("Particle seeding");
@@ -757,6 +764,10 @@ int main(int argc, char *argv[]){
     if (hostParams.exportParticles)
         dataExport.exportParticlesToVTK("particles" + Utilities::intToString(0) + ".vtu");
 
+    std::optional<BoundaryLoadsCalculator3D> boundaryLoadsCalculator;
+    if (hostParams.calculateLoads)
+        boundaryLoadsCalculator.emplace(mesh, hostParams);
+
     timer.start();
 
     //time loop
@@ -834,6 +845,12 @@ int main(int argc, char *argv[]){
         pScope.start("Particle velocity correction");
         particleHandler.correctParticleVelocity(integrator.getVelocitySolution(), integrator.getVelocitySolutionOld());
         pScope.stop();
+
+        if (boundaryLoadsCalculator) {
+            pScope.start("Boundary loads calculation");
+            boundaryLoadsCalculator->calculateLoads(t, integrator.getVelocitySolution(), pressureSolution, faceQuadratureFormula, faceQuadraturePointsNum);
+            pScope.stop();
+        }
 
         if (step_number % hostParams.outputFrequency == 0) {
             ProfilingScope scope("Results output");
