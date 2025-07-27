@@ -41,7 +41,6 @@ SET(src_particle_files
 	${PROJECT_SOURCE_PATH}/particles/particle_handler_3d.cu
 	)
 SET(src_postprocessing_files
-	${PROJECT_SOURCE_PATH}/postprocessing/boundary_loads_calculator_3d.cu
 	${PROJECT_SOURCE_PATH}/postprocessing/data_export.cu
 	${PROJECT_SOURCE_PATH}/postprocessing/data_export_3d.cu
 	${PROJECT_SOURCE_PATH}/postprocessing/postprocessor_3d.cu
@@ -85,7 +84,6 @@ SET(header_linear_algebra_files
 	${PROJECT_SOURCE_PATH}/linear_algebra/sparse_matrix.cuh
 	)
 SET(header_postprocessing_files
-	${PROJECT_SOURCE_PATH}/postprocessing/boundary_loads_calculator_3d.cuh
 	${PROJECT_SOURCE_PATH}/postprocessing/data_export.cuh
 	${PROJECT_SOURCE_PATH}/postprocessing/data_export_3d.cuh
 	${PROJECT_SOURCE_PATH}/postprocessing/postprocessor_3d.cuh
