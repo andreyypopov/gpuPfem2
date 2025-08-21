@@ -1,8 +1,8 @@
 #ifndef DATA_EXPORT_3D_H
 #define DATA_EXPORT_3D_H
 
-#include "mesh_3d.cuh"
-#include "particles/particle_handler_3d.cuh"
+#include "../mesh_3d.cuh"
+#include "../particles/particle_handler_3d.cuh"
 
 #include <map>
 #include <vector>
@@ -14,6 +14,10 @@ public:
 
     void addScalarDataVector(const deviceVector<double> &dataVector, const std::string &fieldname);
 
+    void addVectorDataVector(const deviceVector<double*> &dataVector, const std::string &fieldname);
+
+    void addTensorDataVector(const deviceVector<GenericMatrix3x3> &dataVector, const std::string &fieldname);
+
     void exportToVTK(const std::string &filename) const;
 
     void exportParticlesToVTK(const std::string &filename);
@@ -24,6 +28,12 @@ private:
 
     std::map<std::string, double*> scalarDataVectors;
     std::map<std::string, std::vector<double>> hostScalarDataVectors;
+
+    std::map<std::string, std::array<double*, 3>> vectorDataVectors;
+    std::map<std::string, std::array<std::vector<double>, 3>> hostVectorDataVectors;
+
+    std::map<std::string, GenericMatrix3x3*> tensorDataVectors;
+    std::map<std::string, std::vector<GenericMatrix3x3>> hostTensorDataVectors;
 
     std::vector<Particle3D> hostParticles;
     int particleCount;

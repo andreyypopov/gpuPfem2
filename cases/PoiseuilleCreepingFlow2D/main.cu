@@ -1,4 +1,3 @@
-#include "data_export.cuh"
 #include "Dirichlet_bcs.cuh"
 #include "geometry.cuh"
 #include "mesh_2d.cuh"
@@ -16,6 +15,8 @@
 #include "linear_algebra/linear_solver.cuh"
 #include "linear_algebra/preconditioners.cuh"
 #include "linear_algebra/sparse_matrix.cuh"
+
+#include "postprocessing/data_export.cuh"
 
 #include <vector>
 
@@ -84,7 +85,7 @@ __global__ void kSetEdgeBoundaryIDs(int n, const Point2 *vertices, const uint3 *
 }
 
 __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, const uint3 *cells, double *areas, Matrix2x2 *invJacobi,
-    const int3 *edgeBoundaryIDs, const double **velocity, const double** velocityOld,
+    const int3 *edgeBoundaryIDs, double **velocity, double** velocityOld,
     const int **rowOffset, const int **colIndices, double **matrixValues, double **rhsVector)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -175,7 +176,7 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, cons
 }
 
 __global__ void kIntegratePressureEquation(int n, const Point2* vertices, const uint3* cells, double* areas, Matrix2x2* invJacobi,
-    const double** velocityPrediction, const int* rowOffset, const int* colIndices, double* matrixValues, double* rhsVector)
+    double** velocityPrediction, const int* rowOffset, const int* colIndices, double* matrixValues, double* rhsVector)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -216,7 +217,7 @@ __global__ void kIntegratePressureEquation(int n, const Point2* vertices, const 
 }
 
 __global__ void kIntegrateVelocityCorrection(int n, const Point2* vertices, const uint3* cells, double* areas, Matrix2x2* invJacobi,
-    const double** velocityPrediction, const double* pressure, const int** rowOffset, const int** colIndices, double** matrixValues, double** rhsVector)
+    double** velocityPrediction, double* pressure, const int** rowOffset, const int** colIndices, double** matrixValues, double** rhsVector)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -260,7 +261,7 @@ __global__ void kIntegrateVelocityCorrection(int n, const Point2* vertices, cons
 }
 
 __global__ void kAccumulatePressureGradient(int n, const uint3* cells, double* areas, Matrix2x2* invJacobi,
-    const double* pressure, const int* DirichletNodesMap, double *numerator, double *denominator, int component)
+    double* pressure, const int* DirichletNodesMap, double *numerator, double *denominator, int component)
 {
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -337,6 +338,14 @@ public:
     PoiseuilleFlowIntegrator(const Mesh2D& mesh_)
         : NumericalIntegrator2D(mesh_) { };
     
+    const auto& getVelocitySolution() const {
+        return velocitySolution;
+    }
+
+    const auto& getVelocityPrediction() const {
+        return velocityPrediction;
+    }
+
     //setup pointers (including device ones)
     void setupVelocityPrediction(std::array<SparseMatrixCSR, 2>& csrMatrix, std::array<deviceVector<double>, 2>& rhsVector,
         const std::array<deviceVector<double>, 2>& velocity);
@@ -354,10 +363,10 @@ public:
     void assembleVelocityCorrection();
 
 private:
-    deviceVector<const double*> velocitySolution;
-    deviceVector<const double*> velocitySolutionOld;
-    deviceVector<const double*> velocityPrediction;
-    const double* pressure;
+    deviceVector<double*> velocitySolution;
+    deviceVector<double*> velocitySolutionOld;
+    deviceVector<double*> velocityPrediction;
+    double* pressure;
 
     deviceVector<double*> velocityPredictionRhs;
     deviceVector<double*> velocityCorrectionRhs;
@@ -378,7 +387,7 @@ private:
 
 void PoiseuilleFlowIntegrator::setupVelocityPrediction(std::array<SparseMatrixCSR, 2>& csrMatrix, std::array<deviceVector<double>, 2>& rhsVector, const std::array<deviceVector<double>, 2>& velocity)
 {
-    const double* vel[2];
+    double* vel[2];
     const int* rowOffset[2];
     const int* colIndices[2];
     double* matrixValues[2];
@@ -417,8 +426,8 @@ void PoiseuilleFlowIntegrator::setupPressure(SparseMatrixCSR& csrMatrix, deviceV
 void PoiseuilleFlowIntegrator::setupVelocityCorrection(std::array<SparseMatrixCSR, 2>& csrMatrix, std::array<deviceVector<double>, 2>& rhsVector,
     const std::array<deviceVector<double>, 2>& velocity, const std::array<deviceVector<double>, 2>& velocityOld)
 {
-    const double* vel[2];
-    const double* velOld[2];
+    double* vel[2];
+    double* velOld[2];
     const int* rowOffset[2];
     const int* colIndices[2];
     double* matrixValues[2];
@@ -594,12 +603,9 @@ int main(int argc, char *argv[]){
     gmresSolver.init(velocityPredictionMatrix[0]);
 
     DataExport dataExport(mesh);
-    dataExport.addScalarDataVector(velocitySolution[0], "velX");
-    dataExport.addScalarDataVector(velocitySolution[1], "velY");
-    if (hostParams.exportPredictionVelocity) {
-        dataExport.addScalarDataVector(velocityPrediction[0], "velPredictionX");
-        dataExport.addScalarDataVector(velocityPrediction[1], "velPredictionY");
-    }
+    dataExport.addVectorDataVector(integrator.getVelocitySolution(), "velocity");
+    if (hostParams.exportPredictionVelocity)
+        dataExport.addVectorDataVector(integrator.getVelocityPrediction(), "velocityPrediction");
     dataExport.addScalarDataVector(pressureSolution, "pressure");
     
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");

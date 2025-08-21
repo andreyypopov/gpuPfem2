@@ -1,6 +1,6 @@
-#include "data_export.cuh"
+#include "data_export_3d.cuh"
 
-DataExport::DataExport(const Mesh2D &mesh, const ParticleHandler2D *particleHandler)
+DataExport3D::DataExport3D(const Mesh3D &mesh, const ParticleHandler3D *particleHandler)
     : mesh(mesh)
     , particleHandler(particleHandler)
     , particleCount(0)
@@ -8,13 +8,30 @@ DataExport::DataExport(const Mesh2D &mesh, const ParticleHandler2D *particleHand
 
 }
 
-void DataExport::addScalarDataVector(const deviceVector<double> &dataVector, const std::string &fieldname)
+void DataExport3D::addScalarDataVector(const deviceVector<double> &dataVector, const std::string &fieldname)
 {
     scalarDataVectors[fieldname] = dataVector.data;
     hostScalarDataVectors[fieldname].resize(mesh.getHostVertices().size());
 }
 
-void DataExport::exportToVTK(const std::string &filename) const
+void DataExport3D::addVectorDataVector(const deviceVector<double*> &dataVector, const std::string &fieldname)
+{
+    std::vector<double*> hostPointers(3);
+    copy_d2h(dataVector.data, hostPointers.data(), 3);
+
+    for (int i = 0; i < 3; ++i){
+        vectorDataVectors[fieldname][i] = hostPointers[i];
+        hostVectorDataVectors[fieldname][i].resize(mesh.getHostVertices().size());
+    }
+}
+
+void DataExport3D::addTensorDataVector(const deviceVector<GenericMatrix3x3> &dataVector, const std::string &fieldname)
+{
+    tensorDataVectors[fieldname] = dataVector.data;
+    hostTensorDataVectors[fieldname].resize(mesh.getHostVertices().size());
+}
+
+void DataExport3D::exportToVTK(const std::string &filename) const
 {
     std::ofstream outputFile(filename.c_str());
     if(outputFile.is_open()){
@@ -30,17 +47,17 @@ void DataExport::exportToVTK(const std::string &filename) const
         //vertices
         outputFile << "      <Points>" << std::endl;
         outputFile << "        <DataArray type=\"Float32\" NumberOfComponents=\"3\" Format=\"ascii\">" << std::endl;
-        for(const Point2 &vertex : hostVertices)
-            outputFile << "        " << vertex.x << " " << vertex.y << " 0.0" << std::endl;
+        for(const Point3 &vertex : hostVertices)
+            outputFile << "        " << vertex.x << " " << vertex.y << " " << vertex.z << std::endl;
         outputFile << "        </DataArray>" << std::endl;
         outputFile << "      </Points>" << std::endl;
 
-        //cells (triangles)
+        //cells (tetrahedra)
         outputFile << "      <Cells>" << std::endl;
         outputFile << "        <DataArray type=\"Int32\" Name=\"connectivity\" Format=\"ascii\">" << std::endl;
         outputFile << "          ";
-        for (const uint3 &cell : hostCells)
-            outputFile << cell.x << " " << cell.y << " " << cell.z << " ";
+        for (const uint4 &cell : hostCells)
+            outputFile << cell.x << " " << cell.y << " " << cell.z << " " << cell.w << " ";
         outputFile << std::endl;
         outputFile << "        </DataArray>" << std::endl;
 
@@ -48,7 +65,7 @@ void DataExport::exportToVTK(const std::string &filename) const
         outputFile << "        <DataArray type=\"Int32\" Name=\"offsets\" Format=\"ascii\">" << std::endl;
         outputFile << "          ";
         for (int i = 0; i < hostCells.size(); ++i)
-            outputFile << (i + 1) * 3 << " ";
+            outputFile << (i + 1) * 4 << " ";
         outputFile << std::endl;
         outputFile << "        </DataArray>" << std::endl;
 
@@ -56,15 +73,17 @@ void DataExport::exportToVTK(const std::string &filename) const
         outputFile << "        <DataArray type=\"UInt8\" Name=\"types\" Format=\"ascii\">" << std::endl;
         outputFile << "          ";
         for (int i = 0; i < hostCells.size(); ++i)
-            outputFile << 5 << " ";
+            outputFile << 10 << " ";
         outputFile << std::endl;
         outputFile << "        </DataArray>" << std::endl;
 
         outputFile << "      </Cells>" << std::endl;
 
-        if(!scalarDataVectors.empty()){
+        const bool fieldsAreUsed = !scalarDataVectors.empty() || !vectorDataVectors.empty() || !tensorDataVectors.empty();
+        if (fieldsAreUsed)
             outputFile << "      <PointData Scalars=\"scalars\">" << std::endl;
 
+        if(!scalarDataVectors.empty())
             for(const auto& it : scalarDataVectors){
                 outputFile << "        <DataArray type=\"Float32\" Name=\"" << it.first << "\" Format=\"ascii\">" << std::endl;
                 outputFile << "        ";
@@ -80,8 +99,40 @@ void DataExport::exportToVTK(const std::string &filename) const
                 outputFile << "        </DataArray>" << std::endl;
             }
 
+        if (!vectorDataVectors.empty())
+            for(const auto& it : vectorDataVectors) {
+                outputFile << "        <DataArray type=\"Float32\" Name=\"" << it.first << "\" NumberOfComponents=\"3\" Format=\"ascii\">" << std::endl;
+
+                const auto &hostData = hostVectorDataVectors.at(it.first);
+                for (int i = 0; i < 3; ++i)
+                    copy_d2h(it.second[i], hostData[i].data(), hostVertices.size());
+
+                for(int i = 0; i < hostVertices.size(); ++i)
+                    outputFile << "          " << hostData[0][i] << " " << hostData[1][i] << " " << hostData[2][i] << std::endl;
+
+                outputFile << "        </DataArray>" << std::endl;
+            }
+
+        if (!tensorDataVectors.empty())
+            for(const auto& it : tensorDataVectors) {
+                outputFile << "        <DataArray type=\"Float32\" Name=\"" << it.first << "\" NumberOfComponents=\"9\" Format=\"ascii\">" << std::endl;
+
+                const GenericMatrix3x3 *hostData = hostTensorDataVectors.at(it.first).data();
+                copy_d2h(it.second, hostData, hostVertices.size());
+
+                for(int i = 0; i < hostVertices.size(); ++i){
+                    outputFile << "          ";
+                    for(int k = 0; k < 3; ++k)
+                        for(int l = 0; l < 3; ++l)
+                            outputFile << hostData[i](k, l) << " ";
+                    outputFile << std::endl;
+                }
+
+                outputFile << "        </DataArray>" << std::endl;
+            }
+
+        if (fieldsAreUsed)
             outputFile << "      </PointData>" << std::endl;
-        }
 
         //footer
         outputFile << "    </Piece>" << std::endl;
@@ -94,7 +145,7 @@ void DataExport::exportToVTK(const std::string &filename) const
         printf("Error while saving mesh solution to a file\n");
 }
 
-void DataExport::exportParticlesToVTK(const std::string &filename)
+void DataExport3D::exportParticlesToVTK(const std::string & filename)
 {
     if(particleCount != particleHandler->getParticleCount()){
         particleCount = particleHandler->getParticleCount();
@@ -115,7 +166,7 @@ void DataExport::exportParticlesToVTK(const std::string &filename)
     	outputFile << "      <Points>" << std::endl;
 	    outputFile << "        <DataArray type=\"Float32\" NumberOfComponents=\"3\" Format=\"ascii\">" << std::endl;
 	    for(const auto &particleIndex : hostParticles)
-		    outputFile << "          " << particleIndex.getPosition().x << " " << particleIndex.getPosition().y << " 0.0" << std::endl;
+		    outputFile << "          " << particleIndex.getPosition().x << " " << particleIndex.getPosition().y << " " << particleIndex.getPosition().z << std::endl;
 
 	    outputFile << "        </DataArray>" << std::endl;
     	outputFile << "      </Points>" << std::endl;
@@ -154,7 +205,7 @@ void DataExport::exportParticlesToVTK(const std::string &filename)
         //velocity
         outputFile << "        <DataArray type=\"Float32\" Name=\"velocity\" NumberOfComponents=\"3\" Format=\"ascii\">" << std::endl;
         for(const auto &particleIndex : hostParticles)
-            outputFile << "          " << particleIndex.getVelocity().x << " " << particleIndex.getVelocity().y << " 0.0" << std::endl;
+            outputFile << "          " << particleIndex.getVelocity().x << " " << particleIndex.getVelocity().y << " " << particleIndex.getVelocity().z << std::endl;
         outputFile << "        </DataArray>" << std::endl;
 
         outputFile << "      </PointData>" << std::endl;

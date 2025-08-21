@@ -153,6 +153,11 @@ public:
         return res;
     }
 
+    __host__ __device__ inline double* rawPointer()
+    {
+        return &data[0];
+    }
+
 private:
     double data[9];
 };

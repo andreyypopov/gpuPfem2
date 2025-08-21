@@ -1,8 +1,8 @@
 #ifndef DATA_EXPORT_H
 #define DATA_EXPORT_H
 
-#include "mesh_2d.cuh"
-#include "particles/particle_handler_2d.cuh"
+#include "../mesh_2d.cuh"
+#include "../particles/particle_handler_2d.cuh"
 
 #include <map>
 #include <vector>
@@ -14,6 +14,8 @@ public:
 
     void addScalarDataVector(const deviceVector<double> &dataVector, const std::string &fieldname);
 
+    void addVectorDataVector(const deviceVector<double*> &dataVector, const std::string &fieldname);
+
     void exportToVTK(const std::string &filename) const;
 
     void exportParticlesToVTK(const std::string &filename);
@@ -24,6 +26,9 @@ private:
 
     std::map<std::string, double*> scalarDataVectors;
     std::map<std::string, std::vector<double>> hostScalarDataVectors;
+
+    std::map<std::string, std::array<double*, 2>> vectorDataVectors;
+    std::map<std::string, std::array<std::vector<double>, 2>> hostVectorDataVectors;
 
     std::vector<Particle2D> hostParticles;
     int particleCount;

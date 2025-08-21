@@ -17,7 +17,8 @@ Solution of 2D and 3D problems using PFEM-2. The whole pipeline, including both 
 9. Solution of the linear system using PCG or GMRES with or without a preconditioner (Jacobi, Incomplete LU/Cholesky decomposition)
 10. Correction of particle velocity
 11. Export of results to a VTK (XML-type) file
-12. Calculation of aerodynamic loads and coefficients (drag and lift force) on bodies (only in 2D)
+12. Calculation and export to CSV of aerodynamic loads and coefficients (drag and lift force) on bodies
+13. Calculation and export to VTK of vorticity and Q-criterion (in 3D).
 
 ## Prerequisites
 

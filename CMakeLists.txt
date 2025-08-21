@@ -15,8 +15,6 @@ INCLUDE(${PROJECT_ROOT_PATH}/cmake/functions.cmake)
 SET(PROJECT_SOURCE_PATH ${PROJECT_ROOT_PATH}/src)
 
 SET(src_files
-	${PROJECT_SOURCE_PATH}/data_export.cu
-	${PROJECT_SOURCE_PATH}/data_export_3d.cu
 	${PROJECT_SOURCE_PATH}/Dirichlet_bcs.cu
 	${PROJECT_SOURCE_PATH}/mesh_2d.cu
 	${PROJECT_SOURCE_PATH}/mesh_3d.cu
@@ -42,9 +40,12 @@ SET(src_particle_files
 	${PROJECT_SOURCE_PATH}/particles/particle_3d.cu
 	${PROJECT_SOURCE_PATH}/particles/particle_handler_3d.cu
 	)
+SET(src_postprocessing_files
+	${PROJECT_SOURCE_PATH}/postprocessing/data_export.cu
+	${PROJECT_SOURCE_PATH}/postprocessing/data_export_3d.cu
+	${PROJECT_SOURCE_PATH}/postprocessing/postprocessor_3d.cu
+	)
 SET(header_files
-	${PROJECT_SOURCE_PATH}/data_export.cuh
-	${PROJECT_SOURCE_PATH}/data_export_3d.cuh
 	${PROJECT_SOURCE_PATH}/Dirichlet_bcs.cuh
 	${PROJECT_SOURCE_PATH}/geometry.cuh
 	${PROJECT_SOURCE_PATH}/mesh_2d.cuh
@@ -82,6 +83,11 @@ SET(header_linear_algebra_files
 	${PROJECT_SOURCE_PATH}/linear_algebra/preconditioners.cuh
 	${PROJECT_SOURCE_PATH}/linear_algebra/sparse_matrix.cuh
 	)
+SET(header_postprocessing_files
+	${PROJECT_SOURCE_PATH}/postprocessing/data_export.cuh
+	${PROJECT_SOURCE_PATH}/postprocessing/data_export_3d.cuh
+	${PROJECT_SOURCE_PATH}/postprocessing/postprocessor_3d.cuh
+	)
 
 source_group("gpuPfem2" FILES
 	${src_files}
@@ -108,12 +114,18 @@ source_group("gpuPfem2/linear_algebra" FILES
 	${header_linear_algebra_files}
 )
 
+source_group("gpuPfem2/postprocessing" FILES
+	${src_postprocessing_files}
+	${header_postprocessing_files}
+)
+
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_INSTALL_PREFIX "${PROJECT_ROOT_PATH}/install" CACHE PATH "Library installation path" FORCE)
 endif()
 
 add_library(gpuPfem2Lib SHARED ${src_files} ${src_particle_files} ${src_common_files} ${src_integration_files} ${src_linear_algebra_files} ${header_files}
-	${header_particle_files} ${header_common_files} ${header_integration_files} ${header_linear_algebra_files})
+	${header_particle_files} ${header_common_files} ${header_integration_files} ${header_linear_algebra_files}
+	${src_postprocessing_files} ${header_postprocessing_files})
 
 prepare_project(${PROJECT_NAME})
 setup_openmp(${PROJECT_NAME})
@@ -125,6 +137,7 @@ install(FILES ${header_common_files} DESTINATION include/common)
 install(FILES ${header_integration_files} DESTINATION include/integration)
 install(FILES ${header_linear_algebra_files} DESTINATION include/linear_algebra)
 install(FILES ${header_particle_files} DESTINATION include/particles)
+install(FILES ${header_postprocessing_files} DESTINATION include/postprocessing)
 
 set_target_properties(gpuPfem2Lib PROPERTIES VERSION 1.0)
 set_target_properties(gpuPfem2Lib PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)

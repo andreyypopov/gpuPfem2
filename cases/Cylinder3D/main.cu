@@ -1,6 +1,4 @@
-#include "data_export_3d.cuh"
 #include "Dirichlet_bcs.cuh"
-#include "geometry.cuh"
 #include "mesh_3d.cuh"
 #include "parameters.cuh"
 
@@ -19,6 +17,8 @@
 #include "linear_algebra/sparse_matrix.cuh"
 
 #include "particles/particle_handler_3d.cuh"
+
+#include "postprocessing/data_export_3d.cuh"
 
 #include <set>
 #include <vector>
@@ -423,6 +423,10 @@ public:
         return velocitySolutionOld;
     }
 
+    const auto& getVelocityPrediction() const {
+        return velocityPrediction;
+    }
+
     //setup pointers (including device ones)
     void setupVelocityPrediction(std::array<SparseMatrixCSR, 3>& csrMatrix, std::array<deviceVector<double>, 3>& rhsVector,
         const std::array<deviceVector<double>, 3>& velocity);
@@ -566,6 +570,174 @@ constexpr double inletVelocity(const Point3 &pt)
     return coeff * pt.y * (H - pt.y) * pt.z * (H - pt.z);
 }
 
+__global__ void kCountBodyFaces(int n, int boundaryID, const int4* faceBoundaryIDs, int* boundaryFacesCount, int2 *boundaryFaces = nullptr)
+{
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < n) {
+        const int4 tetFacesBoundaryIDs = faceBoundaryIDs[idx];
+
+        for(int i = 0; i < 4; ++i)
+            if (*(&tetFacesBoundaryIDs.x + i) == boundaryID){
+                const int pos = atomicAdd(boundaryFacesCount, 1);
+
+                if(boundaryFaces){
+                    const int bndCell = idx;
+                    const int bndFace = i;
+                    boundaryFaces[pos] = { bndCell, bndFace };
+                }
+
+                return;     //a tetrahedron can not contain 2 boundary faces simultaneously
+            }
+    }
+}
+
+__global__ void kCalculateBoundaryFaceNormals(int n, const Point3 *vertices, const uint4 *cells, const int2 *boundaryFaces, Point3 *boundaryFaceNormals, double *boundaryFaceArea)
+{
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < n) {
+        const auto [bndCell, bndFace] = boundaryFaces[idx];
+        const uint4 tet = cells[bndCell];
+
+        Point3 faceVertices[3];
+        for(int i = 0; i < 3; ++i)
+            faceVertices[i] = vertices[*(&tet.x + ((bndFace + i) % 4))];
+
+        const Point3 v1 = faceVertices[1] - faceVertices[0];
+        const Point3 v2 = faceVertices[2] - faceVertices[0];
+        Point3 normal = cross(v1, v2);
+        const double normalLength = vector_length(normal);
+        boundaryFaceArea[idx] = 0.5 * normalLength;
+        normal *= 1.0 / normalLength;
+
+        const Point3 ov = faceVertices[0] - simParams.pointInside;//vector directed from a point inside body towards a vertex of the face
+        if (dot(normal, ov) < 0)    //the normal vector should be pointed outwards the body
+            normal *= -1.0;
+
+        boundaryFaceNormals[idx] = normal;
+    }
+}
+
+__global__ void kCalculateBodyForces3D(int n, const uint4 *cells, const GenericMatrix3x3 *invJacobi, const int2 *boundaryFaces,
+    const Point3 *boundaryFaceNormals, const double *boundaryFaceArea, double **velocity, const double* pressure, double4* loadValues)
+{
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < n) {
+        const auto [bndCell, bndFace] = boundaryFaces[idx];
+        const uint4 tet = cells[bndCell];
+
+        const GenericMatrix3x3 cellInvJacobi = invJacobi[bndCell];
+
+        unsigned int faceVertices[3];
+        for (int i = 0; i < 3; ++i)
+            faceVertices[i] = *(&tet.x + ((bndFace + i) % 4));
+
+        const Point3 normal = boundaryFaceNormals[idx];
+        const double area = boundaryFaceArea[idx];
+        const Point3 tangent = { normal.y, -normal.x, 0.0 };
+
+        double4 faceLoadValues = { 0, 0, 0, 0 };
+
+        for (int qp = 0; qp < faceQuadraturePointsNum; ++qp) {
+            double qPointPressureValue = 0.0;
+            double qPointDVtDn = 0.0;
+
+            const Point3 Lcoordinates = faceQuadratureFormula[qp].coordinates;
+
+            for(int i = 0; i < 3; ++i){
+                const double shapeValueI = *(&Lcoordinates.x + i);
+                qPointPressureValue += pressure[faceVertices[i]] * shapeValueI;
+
+                const Point3 velocityI = { velocity[0][faceVertices[i]], velocity[1][faceVertices[i]], velocity[2][faceVertices[i]] };
+                const Point3 shapeGradI = cellInvJacobi * shapeFuncGrad3D(i);
+                qPointDVtDn += dot(velocityI, tangent) * dot(shapeGradI, normal);
+            }
+
+            const double weight = faceQuadratureFormula[qp].weight;
+            faceLoadValues.x -= qPointPressureValue * normal.x * weight;
+            faceLoadValues.y -= qPointPressureValue * normal.y * weight;
+            faceLoadValues.z += simParams.mu * qPointDVtDn * tangent.x * weight;
+            faceLoadValues.w += simParams.mu * qPointDVtDn * tangent.y * weight;
+        }
+
+        loadValues[idx] = area * faceLoadValues;
+    }
+}
+
+class BoundaryLoadsCalculator3D
+{
+public:
+    BoundaryLoadsCalculator3D(const Mesh3D& mesh_, const SimulationParameters &parameters)
+    : mesh(mesh_)
+    , coeff(2.0 / (parameters.rho * parameters.meanVelocity * parameters.meanVelocity * parameters.thickness * parameters.channelWidth))
+    {
+        allocate_device(&boundaryFacesCount, 1);
+        allocate_device(&totalForces, 1);
+
+        zero_value_device(boundaryFacesCount, 1);
+        blocks = blocksForSize(mesh.getCells().size);
+        kCountBodyFaces<<<blocks, gpuThreads>>> (mesh.getCells().size, parameters.bodyBoundaryID, mesh.getFaceBoundaryIDs().data, boundaryFacesCount);
+
+        copy_d2h(boundaryFacesCount, &hostBoundaryFacesCount, 1);
+        boundaryFaces.allocate(hostBoundaryFacesCount);
+        boundaryFaceNormals.allocate(hostBoundaryFacesCount);
+        boundaryFaceArea.allocate(hostBoundaryFacesCount);
+        faceForces.allocate(hostBoundaryFacesCount);
+
+        zero_value_device(boundaryFacesCount, 1);
+        kCountBodyFaces<<<blocks, gpuThreads>>> (mesh.getCells().size, parameters.bodyBoundaryID, mesh.getFaceBoundaryIDs().data, boundaryFacesCount, boundaryFaces.data);
+
+        blocks = blocksForSize(hostBoundaryFacesCount);
+        kCalculateBoundaryFaceNormals<<<blocks, gpuThreads>>>(hostBoundaryFacesCount, mesh.getVertices().data, mesh.getCells().data, boundaryFaces.data, boundaryFaceNormals.data, boundaryFaceArea.data);
+
+        forcesFile.open("Forces.csv");
+        forcesFile << "Time;Cx;Cy" << std::endl;
+    }
+    ~BoundaryLoadsCalculator3D()
+    {
+        free_device(boundaryFacesCount);
+        free_device(totalForces);
+
+        if(forcesFile.is_open())
+            forcesFile.close();
+    }
+
+    void calculateLoads(double time, const deviceVector<double*> &velocity, const deviceVector<double> &pressure)
+    {
+        faceForces.clearValues();
+        kCalculateBodyForces3D<<<blocks, gpuThreads>>>(hostBoundaryFacesCount, mesh.getCells().data, mesh.getInvJacobi().data, boundaryFaces.data,
+            boundaryFaceNormals.data, boundaryFaceArea.data, velocity.data, pressure.data, faceForces.data);
+
+        zero_value_device(totalForces, 1);
+        reduceVector<gpuThreads, double, 4><<<1, gpuThreads>>>(hostBoundaryFacesCount, (double*)faceForces.data, (double*)totalForces);
+
+        copy_d2h(totalForces, &hostTotalForces, 1);
+        const double cx = (hostTotalForces.x + hostTotalForces.z) * coeff;
+        const double cy = (hostTotalForces.y + hostTotalForces.w) * coeff;
+        forcesFile << time << ";" << cx << ";" << cy << std::endl;
+    }
+
+private:
+    deviceVector<int2> boundaryFaces;   //index of the tetrahedron is stored together with the index of the boundary face
+    deviceVector<Point3> boundaryFaceNormals;
+    deviceVector<double> boundaryFaceArea;
+    deviceVector<double4> faceForces;
+    double4 *totalForces;
+    double4 hostTotalForces;
+
+    int* boundaryFacesCount;
+    int hostBoundaryFacesCount;
+    unsigned int blocks;
+
+    const Mesh3D& mesh;
+
+    const double coeff;
+
+    std::ofstream forcesFile;
+};
+
 int main(int argc, char *argv[]){
     GpuTimer timer;
     ProfilingScope pScope;
@@ -591,6 +763,12 @@ int main(int argc, char *argv[]){
     hostParams.outputFrequency = 100;
     hostParams.exportParticles = 0;
     hostParams.exportParticleStatistics = 1;
+    hostParams.calculateLoads = 1;
+    hostParams.bodyBoundaryID = 4;
+    hostParams.channelWidth = H;
+    hostParams.thickness = 0.1;
+    hostParams.meanVelocity = 1.0;
+    hostParams.pointInside = { 0.5, 0.2, H/2 };
     copy_h2const(&hostParams, &simParams, 1);
 
     pScope.start("Particle seeding");
@@ -744,16 +922,18 @@ int main(int argc, char *argv[]){
     velocityCorrectionSolver.init(velocityCorrectionMatrix[0]);
 
     DataExport3D dataExport(mesh, &particleHandler);
-    for (int i = 0; i < 3; ++i) {
-        dataExport.addScalarDataVector(velocitySolution[i], velocityFieldName(i));
-        if (hostParams.exportPredictionVelocity)
-            dataExport.addScalarDataVector(velocityPrediction[i], velocityFieldName(i, true));
-    }
+    dataExport.addVectorDataVector(integrator.getVelocitySolution(), "velocity");
+    if (hostParams.exportPredictionVelocity)
+        dataExport.addVectorDataVector(integrator.getVelocityPrediction(), "velocityPrediction");
     dataExport.addScalarDataVector(pressureSolution, "pressure");
     
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");
     if (hostParams.exportParticles)
         dataExport.exportParticlesToVTK("particles" + Utilities::intToString(0) + ".vtu");
+
+    std::optional<BoundaryLoadsCalculator3D> boundaryLoadsCalculator;
+    if (hostParams.calculateLoads)
+        boundaryLoadsCalculator.emplace(mesh, hostParams);
 
     timer.start();
 
@@ -832,6 +1012,12 @@ int main(int argc, char *argv[]){
         pScope.start("Particle velocity correction");
         particleHandler.correctParticleVelocity(integrator.getVelocitySolution(), integrator.getVelocitySolutionOld());
         pScope.stop();
+
+        if (boundaryLoadsCalculator) {
+            pScope.start("Boundary loads calculation");
+            boundaryLoadsCalculator->calculateLoads(t, integrator.getVelocitySolution(), pressureSolution);
+            pScope.stop();
+        }
 
         if (step_number % hostParams.outputFrequency == 0) {
             ProfilingScope scope("Results output");

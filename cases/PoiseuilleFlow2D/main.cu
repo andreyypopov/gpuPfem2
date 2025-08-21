@@ -1,4 +1,3 @@
-#include "data_export.cuh"
 #include "Dirichlet_bcs.cuh"
 #include "geometry.cuh"
 #include "mesh_2d.cuh"
@@ -19,6 +18,8 @@
 #include "linear_algebra/sparse_matrix.cuh"
 
 #include "particles/particle_handler_2d.cuh"
+
+#include "postprocessing/data_export.cuh"
 
 #include <vector>
 
@@ -365,6 +366,10 @@ public:
         return velocitySolutionOld;
     }
 
+    const auto& getVelocityPrediction() const {
+        return velocityPrediction;
+    }
+
     //setup pointers (including device ones)
     void setupVelocityPrediction(std::array<SparseMatrixCSR, 2>& csrMatrix, std::array<deviceVector<double>, 2>& rhsVector,
         const std::array<deviceVector<double>, 2>& velocity);
@@ -643,12 +648,9 @@ int main(int argc, char *argv[]){
     velocityCorrectionSolver.init(velocityCorrectionMatrix[0]);
 
     DataExport dataExport(mesh, &particleHandler);
-    dataExport.addScalarDataVector(velocitySolution[0], "velX");
-    dataExport.addScalarDataVector(velocitySolution[1], "velY");
-    if (hostParams.exportPredictionVelocity) {
-        dataExport.addScalarDataVector(velocityPrediction[0], "velPredictionX");
-        dataExport.addScalarDataVector(velocityPrediction[1], "velPredictionY");
-    }
+    dataExport.addVectorDataVector(integrator.getVelocitySolution(), "velocity");
+    if (hostParams.exportPredictionVelocity)
+        dataExport.addVectorDataVector(integrator.getVelocityPrediction(), "velocityPrediction");
     dataExport.addScalarDataVector(pressureSolution, "pressure");
     
     dataExport.exportToVTK("solution" + Utilities::intToString(0) + ".vtu");

@@ -19,16 +19,23 @@ struct SimulationParameters
     int outputFrequency;            //!< Output data each N frames
     
     int cellDivisionLevel;          //!< Number of times each cell will be divided for particle seeding
+    int maxParticlesPerSubCell;     //!< Maximum number of particles per subcell (excessive particles will be deleted)
     int particleAdvectionSubsteps;  //!< Number of substeps for particle advection within 1 simulation step
     int exportParticles;            //!< Export particles to VTK (boolean flag)
     int exportParticleStatistics;   //!< Export number of particles to a text file
     int exportPredictionVelocity;   //!< Export prediction velocity fields (apart from final velocity, which is always exported)
+
+    //postprocessing
+    int calculateVorticity;         //!< Calculate and export the vorticity field
+    int calculateQcriterion;        //!< Calculate and export the Q criterion
 
     //loads calculation
     int calculateLoads;             //!< Whether or not loads should be calculated on the body surface
     int bodyBoundaryID;             //!< ID of the boundary edges to be used for forces calculation on the body surface
     double thickness;               //!< Body thickness is the z direction
     double meanVelocity;            //!< Mean flow velocity
+    double channelWidth;            //!< Characteristic size of the channel (in 3D)
+    Point3 pointInside;             //!< An arbitrary point inside body (for normals computation)
 
     void setDefaultParameters(){
         rho = 1.0;
@@ -37,6 +44,7 @@ struct SimulationParameters
         tFinal = 10.0;
         dt = 0.01;
         cellDivisionLevel = 2;
+        maxParticlesPerSubCell = 3;
         particleAdvectionSubsteps = 3;
 
         tolerance = 1e-8;
@@ -49,10 +57,15 @@ struct SimulationParameters
         exportParticleStatistics = 0;
         exportPredictionVelocity = 0;
 
+        calculateVorticity = 0;
+        calculateQcriterion = 0;
+
         calculateLoads = 0;
         bodyBoundaryID = -1;
         thickness = 1.0;
         meanVelocity = 1.0;
+        channelWidth = 1.0;
+        pointInside = { 0.0, 0.0, 0.0 };
     }
 };
 

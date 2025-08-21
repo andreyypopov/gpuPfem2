@@ -5,9 +5,12 @@ install
 # IDE
 .vs
 .vscode
+.idea
 
 # artefacts
 *.ods
+*.nsys-rep
+*.vtu
 
 # cmake files
 CMakeFiles
