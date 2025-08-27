@@ -207,7 +207,7 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point3* vertices, cons
         const int4 boundaryIDs = faceBoundaryIDs[idx];
         for (int face = 0; face < 4; ++face) {
             const int boundaryID = *(&boundaryIDs.x + face);
-            if (boundaryID == 0 || boundaryID == 6)
+            if (boundaryID == 0 || boundaryID == 6 || boundaryID == -1)
                 continue;
 
             const Point3 normalVec = normalVector(boundaryID);
@@ -687,7 +687,7 @@ class BoundaryLoadsCalculator3D
 public:
     BoundaryLoadsCalculator3D(const Mesh3D& mesh_, const SimulationParameters &parameters)
     : mesh(mesh_)
-    , coeff(2.0 / (parameters.rho * parameters.meanVelocity * parameters.meanVelocity * parameters.thickness * parameters.channelWidth))
+    , coeff(2.0 / (parameters.rho * parameters.meanVelocity * parameters.meanVelocity * CONSTANTS::PI * parameters.thickness * parameters.thickness * 0.25))
     {
         allocate_device(&boundaryFacesCount, 1);
         allocate_device(&totalForces, 1);

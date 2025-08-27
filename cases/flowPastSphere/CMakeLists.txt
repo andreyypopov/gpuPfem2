@@ -2,7 +2,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.18)
 
 include(CMakePrintHelpers)
 
-project(Cylinder3D)
+project(flowPastSphere)
 SET(PROJECT_NAME "flowPastSphere")
 SET(PROJECT_ROOT_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 

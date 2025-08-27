@@ -53,7 +53,7 @@ __global__ void kFindNeighbors(int n, const uint4 *cells, int *cellNeighborsOffs
             const uint4 tri1 = cells[idx];
 
             for(int cellIdx = 0; cellIdx < gpuThreadsMax; ++cellIdx)
-                if(blockStart + cellIdx < n && cellIdx != idx){
+                if(blockStart + cellIdx < n && blockStart + cellIdx != idx){
                     unsigned int commonPoints = 0;
 
                     const uint4 tri2 = sharedCells[cellIdx];
