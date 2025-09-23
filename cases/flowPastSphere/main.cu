@@ -772,17 +772,17 @@ int main(int argc, char *argv[]){
 
     SimulationParameters hostParams;
     hostParams.setDefaultParameters();
-    hostParams.dt = 0.001;
-    hostParams.mu = 0.001;
-    hostParams.tFinal = 5.001;
+    hostParams.dt = 0.01;
+    hostParams.mu = 0.01;
+    hostParams.tFinal = 5.01;
     hostParams.simulationScheme = 0;
-    hostParams.outputFrequency = 100;
+    hostParams.outputFrequency = 10;
     hostParams.exportParticles = 0;
     hostParams.exportParticleStatistics = 1;
     hostParams.calculateLoads = 1;
     hostParams.bodyBoundaryID = 6;
     hostParams.channelWidth = zMax - zMin;
-    hostParams.thickness = 0.1;
+    hostParams.thickness = 1.0;
     hostParams.meanVelocity = Umag;
     hostParams.pointInside = { 0.0, 0.0, 0.0 };
     copy_h2const(&hostParams, &simParams, 1);
@@ -845,7 +845,7 @@ int main(int argc, char *argv[]){
         }
 
         for (const unsigned int &node : inletVelocityBoundaryNodes) {
-            hostVelocityBCs[0].push_back({ node, inletVelocity(vertices[node]) });
+            hostVelocityBCs[0].push_back({ node, Umag });
             hostVelocityBCs[1].push_back({ node, 0.0 });
             hostVelocityBCs[2].push_back({ node, 0.0 });
         }
@@ -926,7 +926,7 @@ int main(int argc, char *argv[]){
 
     PreconditionerJacobi JacobiPrecond(problemSize, &LA);
     
-    SolverGMRES velocityPredictionSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &JacobiPrecond);
+    SolverGMRES velocityPredictionSolver(hostParams.tolerance, 100, &LA, &JacobiPrecond);
     velocityPredictionSolver.init(velocityPredictionMatrix[0]);
 
     SolverCG pressureSolver(hostParams.tolerance, hostParams.maxIterations, &LA, &JacobiPrecond);
