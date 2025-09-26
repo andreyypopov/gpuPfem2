@@ -69,6 +69,13 @@ public:
         }
     }
 
+    __host__ __device__ SymmetricMatrix3x3 &operator*=(double num)
+    {
+        for (int i = 0; i < 6; ++i)
+            data[i] *= num;
+        return *this;
+    }
+
 private:
     double data[6];
 };
@@ -161,5 +168,15 @@ public:
 private:
     double data[9];
 };
+
+__host__ __device__ inline Point3 operator*(const Matrix3x3 &matrix, const Point3 &vec)
+{
+    Point3 res;
+    res.x = matrix(0, 0) * vec.x + matrix(0, 1) * vec.y + matrix(0, 2) * vec.z;
+    res.y = matrix(1, 0) * vec.x + matrix(1, 1) * vec.y + matrix(1, 2) * vec.z;
+    res.z = matrix(2, 0) * vec.x + matrix(2, 1) * vec.y + matrix(2, 2) * vec.z;
+
+    return res;
+}
 
 #endif // MATRIX3X3_CUH

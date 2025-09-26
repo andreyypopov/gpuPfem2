@@ -652,31 +652,44 @@ __global__ void kCalculateBodyForces3D(int n, const uint4 *cells, const GenericM
 
         const Point3 normal = boundaryFaceNormals[idx];
         const double area = boundaryFaceArea[idx];
-        const Point3 tangent = { normal.y, -normal.x, 0.0 };
 
         double4 faceLoadValues = { 0, 0, 0, 0 };
 
+        //viscous stress is constant over the element in case of 1st order elements
+        SymmetricMatrix3x3 viscousStress;
+        for (int i = 0; i < 4; ++i) {
+            const Point3 shapeGradI = cellInvJacobi * shapeFuncGrad3D(i);
+            const unsigned int tetVertex = *(&tet.x + i);
+            const Point3 velocityI = { velocity[0][tetVertex], velocity[1][tetVertex], velocity[2][tetVertex] };
+
+            viscousStress(0, 0) = 2.0 * shapeGradI.x * velocityI.x;
+            viscousStress(1, 1) = 2.0 * shapeGradI.y * velocityI.y;
+            viscousStress(2, 2) = 2.0 * shapeGradI.z * velocityI.z;
+            viscousStress(0, 1) = shapeGradI.x * velocityI.y + shapeGradI.y * velocityI.x;
+            viscousStress(0, 2) = shapeGradI.x * velocityI.z + shapeGradI.z * velocityI.x;
+            viscousStress(1, 2) = shapeGradI.y * velocityI.z + shapeGradI.z * velocityI.y;
+        }
+        viscousStress *= simParams.mu;
+
+        const Point3 t = viscousStress * normal;
+        const Point3 shearStress = t - dot(t, normal) * normal; //normal component is removed
+
         for (int qp = 0; qp < faceQuadraturePointsNum; ++qp) {
             double qPointPressureValue = 0.0;
-            double qPointDVtDn = 0.0;
 
             const Point3 Lcoordinates = faceQuadratureFormula[qp].coordinates;
 
             for(int i = 0; i < 3; ++i){
                 const double shapeValueI = *(&Lcoordinates.x + i);
                 qPointPressureValue += pressure[faceVertices[i]] * shapeValueI;
-
-                const Point3 velocityI = { velocity[0][faceVertices[i]], velocity[1][faceVertices[i]], velocity[2][faceVertices[i]] };
-                const Point3 shapeGradI = cellInvJacobi * shapeFuncGrad3D(i);
-                qPointDVtDn += dot(velocityI, tangent) * dot(shapeGradI, normal);
             }
 
             const double weight = faceQuadratureFormula[qp].weight;
             faceLoadValues.x -= qPointPressureValue * normal.x * weight;
             faceLoadValues.y -= qPointPressureValue * normal.y * weight;
-            faceLoadValues.z += simParams.mu * qPointDVtDn * tangent.x * weight;
-            faceLoadValues.w += simParams.mu * qPointDVtDn * tangent.y * weight;
         }
+        faceLoadValues.z = shearStress.x;
+        faceLoadValues.w = shearStress.y;
 
         loadValues[idx] = area * faceLoadValues;
     }
