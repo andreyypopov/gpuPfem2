@@ -130,11 +130,11 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, cons
                     }
 
                     aux = simParams.mu * simParams.dt * faceQuadratureFormula[qp].weight;
-                    localMatrix[0](i, j) += aux * (shapeGradI.y * shapeGradJ.y + 4.0 / 3.0 * shapeGradI.x * shapeGradJ.x);
-                    localMatrix[1](i, j) += aux * (shapeGradI.x * shapeGradJ.x + 4.0 / 3.0 * shapeGradI.y * shapeGradJ.y);
+                    localMatrix[0](i, j) += aux * (shapeGradI.y * shapeGradJ.y + shapeGradI.x * shapeGradJ.x);
+                    localMatrix[1](i, j) += aux * (shapeGradI.x * shapeGradJ.x + shapeGradI.y * shapeGradJ.y);
 
-                    localRhs[0](i) -= aux * (shapeGradI.y * shapeGradJ.x - 2.0 / 3.0 * shapeGradI.x * shapeGradJ.y) * velocity[1][*(&triangle.x + j)];
-                    localRhs[1](i) -= aux * (shapeGradI.x * shapeGradJ.y - 2.0 / 3.0 * shapeGradI.y * shapeGradJ.x) * velocity[0][*(&triangle.x + j)];
+                    localRhs[0](i) -= aux * (shapeGradI.y * shapeGradJ.x - shapeGradI.x * shapeGradJ.y) * velocity[1][*(&triangle.x + j)];
+                    localRhs[1](i) -= aux * (shapeGradI.x * shapeGradJ.y - shapeGradI.y * shapeGradJ.x) * velocity[0][*(&triangle.x + j)];
 
                     if (pressureOld) {
                         aux = shapeValueI * pressureOld[*(&triangle.x + j)] * simParams.dt * faceQuadratureFormula[qp].weight;
@@ -169,11 +169,11 @@ __global__ void kIntegrateVelocityPrediction(int n, const Point2 *vertices, cons
                     for (int j = 0; j < 3; ++j) {
                         const Point2 shapeGradJ = cellInvJacobi * shapeFuncGrad(j);
 
-                        localMatrix[0](i, j) -= aux * shapeValueI * ((4.0 / 3.0) * shapeGradJ.x * normalVec.x + shapeGradJ.y * normalVec.y);
-                        localMatrix[1](i, j) -= aux * shapeValueI * (shapeGradJ.x * normalVec.x + (4.0 / 3.0) * shapeGradJ.y * normalVec.y);
+                        localMatrix[0](i, j) -= aux * shapeValueI * (shapeGradJ.x * normalVec.x + shapeGradJ.y * normalVec.y);
+                        localMatrix[1](i, j) -= aux * shapeValueI * (shapeGradJ.x * normalVec.x + shapeGradJ.y * normalVec.y);
 
-                        localRhs[0](i) += aux * shapeValueI * velocity[1][*(&triangle.x + j)] * ((-2.0 / 3.0) * shapeGradJ.y * normalVec.x + shapeGradJ.x * normalVec.y);
-                        localRhs[1](i) += aux * shapeValueI * velocity[0][*(&triangle.x + j)] * (shapeGradJ.y * normalVec.x + (-2.0 / 3.0) * shapeGradJ.x * normalVec.y);
+                        localRhs[0](i) += aux * shapeValueI * velocity[1][*(&triangle.x + j)] * (- shapeGradJ.y * normalVec.x + shapeGradJ.x * normalVec.y);
+                        localRhs[1](i) += aux * shapeValueI * velocity[0][*(&triangle.x + j)] * (shapeGradJ.y * normalVec.x - shapeGradJ.x * normalVec.y);
                     }
                 }
             }
@@ -565,10 +565,12 @@ int main(int argc, char *argv[]){
                 hostPressureBCs.push_back({ i, 10.0 });									//option 3 (pressure-driven)
             } else if (std::fabs(node.x - 5.0) < CONSTANTS::DOUBLE_MIN)
                 hostPressureBCs.push_back({ i, 0.0 });
-            else if ((std::fabs(node.y) < CONSTANTS::DOUBLE_MIN) || (std::fabs(node.y - 1.0) < CONSTANTS::DOUBLE_MIN)) {
+
+            if ((std::fabs(node.y) < CONSTANTS::DOUBLE_MIN) || (std::fabs(node.y - 1.0) < CONSTANTS::DOUBLE_MIN)) {
                 hostVelocityBCs[0].push_back({i, 0.0});
                 hostVelocityBCs[1].push_back({i, 0.0});
-            }
+            } else if ((std::fabs(node.x - (-5.0)) < CONSTANTS::DOUBLE_MIN) || (std::fabs(node.x - 5.0) < CONSTANTS::DOUBLE_MIN))
+				hostVelocityBCs[1].push_back({i, 0.0});
         }
 
         for (int i = 0; i < 2; ++i) {

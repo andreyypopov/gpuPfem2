@@ -59,6 +59,7 @@ make
 6. Poiseuille flow in 3D
 7. 3-dimensional flow past a cylinder in a channel - meshes for various bodies (either circular or square section, either domain-wide body or smaller width; formulation similar to tests 3D-2Q and 3D-2Z from _Schäfer M. et al_).
 8. 3-dimensional flow past a NACA-0012 airfoil at a certain angle of attack
+9. 3-dimensional flow past a sphere at low Reynolds numbers (problem formulation from _Johnson T.A., Patel V.C. (1999). Flow past a sphere up to a Reynolds number of 300_). Cases for OpenFOAM versions 13 and v2506 are also enclosed for comparison. **Solver still suffers from viscosity underapproximation.**
 
 ## Governing equations and splitting schemes
 
